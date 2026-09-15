@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  clonegpt-db:
+    image: postgres:16-alpine
+    container_name: clonegpt-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: clonegpt
+    ports:
+      - "5433:5432"
+    volumes:
+      - clonegpt_data:/var/lib/postgresql/data
+      - ./server/src/schema/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  clonegpt_data:
