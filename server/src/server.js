@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool, initDatabase } from './config/db.js';
-import { generateDeepSeekStream } from './services/deepseek.js';
+import { generateDeepSeekStream, optimizePrompt } from './services/deepseek.js';
 
 dotenv.config();
 
@@ -62,6 +62,25 @@ app.get('/api/config', (req, res) => {
       { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (Reasoner)', desc: 'OpenAI o1급 심층 사고 & 복잡한 추론 특화' },
     ]
   });
+});
+
+// AI 프롬프트 개선 (Prompt Optimizer) 엔드포인트
+app.post('/api/prompt/optimize', async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: '개선할 프롬프트를 입력해주세요.' });
+  }
+
+  try {
+    const enhancedPrompt = await optimizePrompt(prompt.trim());
+    return res.json({
+      originalPrompt: prompt.trim(),
+      enhancedPrompt,
+    });
+  } catch (error) {
+    console.error('Prompt optimize API error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
 });
 
 // 2. Get all conversations

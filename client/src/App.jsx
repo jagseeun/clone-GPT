@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar.jsx';
 import WelcomeScreen from './components/WelcomeScreen.jsx';
 import ChatArea from './components/ChatArea.jsx';
 import ChatInput from './components/ChatInput.jsx';
+import PromptModal from './components/PromptModal.jsx';
 import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain, Check, Sparkles, Zap } from 'lucide-react';
 
 export default function App() {
@@ -19,6 +20,12 @@ export default function App() {
     availableModels: []
   });
   const [showBanner, setShowBanner] = useState(true);
+
+  // 프롬프트 개선 모달 상태
+  const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [originalPromptForModal, setOriginalPromptForModal] = useState('');
+  const [enhancedPrompt, setEnhancedPrompt] = useState('');
 
   // 테마 상태 (Dark / Light)
   const [theme, setTheme] = useState(() => {
@@ -39,7 +46,7 @@ export default function App() {
   const modelMenuRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  // 현재 보고 있는 대화방 ID를 ref로 추적 (비동기 스트림 중 방 이동 감지용)
+  // 현재 보고 있는 대화방 ID를 ref로 추적
   const currentIdRef = useRef(currentId);
   useEffect(() => {
     currentIdRef.current = currentId;
@@ -111,7 +118,7 @@ export default function App() {
     fetchConversations();
   }, []);
 
-  // 3. 특정 대화방 클릭 시 메시지 로드 (다른 방 생성은 백그라운드에서 계속 진행되도록 둠)
+  // 3. 특정 대화방 클릭 시 메시지 로드
   const handleSelectConversation = async (id) => {
     try {
       setCurrentId(id);
@@ -125,7 +132,7 @@ export default function App() {
     }
   };
 
-  // 4. 새로운 대화 시작 (화면 리셋)
+  // 4. 새로운 대화 시작
   const handleNewChat = () => {
     setCurrentId(null);
     setMessages([]);
@@ -148,7 +155,7 @@ export default function App() {
     }
   };
 
-  // 6. 사용자가 명시적으로 [생성 중지(■)]를 눌렀을 때만 중단
+  // 6. 생성 중지(Abort)
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -158,9 +165,52 @@ export default function App() {
     setStreamingMessageId(null);
   };
 
-  // 7. DeepSeek 실시간 SSE 스트리밍 메시지 전송
-  const handleSend = async () => {
-    const text = input.trim();
+  // 7. [신규 기능] AI 프롬프트 개선 실행
+  const handleEnhancePrompt = async () => {
+    const raw = input.trim();
+    if (!raw || isEnhancingPrompt) return;
+
+    setIsEnhancingPrompt(true);
+    setOriginalPromptForModal(raw);
+
+    try {
+      const res = await fetch('/api/prompt/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: raw }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || '프롬프트 개선 실패');
+      }
+
+      const data = await res.json();
+      setEnhancedPrompt(data.enhancedPrompt);
+      setShowPromptModal(true);
+    } catch (err) {
+      console.error('Enhance prompt error:', err);
+      alert('프롬프트 개선 중 오류가 발생했습니다: ' + err.message);
+    } finally {
+      setIsEnhancingPrompt(false);
+    }
+  };
+
+  // 개선된 프롬프트를 입력창에 적용하기
+  const handleApplyEnhancedPrompt = (newPrompt) => {
+    setInput(newPrompt);
+    setShowPromptModal(false);
+  };
+
+  // 개선된 프롬프트로 바로 전송하기
+  const handleSendEnhancedDirectly = (newPrompt) => {
+    setShowPromptModal(false);
+    executeSendMessage(newPrompt);
+  };
+
+  // 8. 메시지 전송 로직 분리
+  const executeSendMessage = async (textToSend) => {
+    const text = textToSend.trim();
     if (!text || isLoading) return;
 
     setInput('');
@@ -192,7 +242,6 @@ export default function App() {
         content: text,
       };
 
-      // AI 답변을 담을 스트리밍 메시지 임시 생성
       const tempAiMsgId = 'ai-stream-' + Date.now();
       const tempAiMsg = {
         id: tempAiMsgId,
@@ -243,7 +292,6 @@ export default function App() {
           try {
             const data = JSON.parse(jsonStr);
 
-            // 사용자가 현재 이 방을 보고 있을 때만 UI 갱신 (다른 방 보고 있으면 DB에만 저장되도록)
             if (currentIdRef.current === convId) {
               if (data.type === 'user_saved') {
                 setMessages((prev) =>
@@ -280,7 +328,6 @@ export default function App() {
                 );
               }
             } else {
-              // 사용자가 다른 방으로 이동한 경우, 사이드바 목록의 updated_at 갱신
               if (data.type === 'done') {
                 fetchConversations();
               }
@@ -320,6 +367,10 @@ export default function App() {
       setStreamingMessageId(null);
       abortControllerRef.current = null;
     }
+  };
+
+  const handleSend = () => {
+    executeSendMessage(input);
   };
 
   const modelsList = [
@@ -467,15 +518,29 @@ export default function App() {
           />
         )}
 
-        {/* 입력창 및 전송/중단 버튼 */}
+        {/* 입력창 및 전송/중단/프롬프트 개선 버튼 */}
         <ChatInput
           input={input}
           setInput={setInput}
           onSend={handleSend}
           onStop={handleStopGeneration}
           isLoading={isLoading}
+          onEnhancePrompt={handleEnhancePrompt}
+          isEnhancing={isEnhancingPrompt}
         />
       </main>
+
+      {/* AI 프롬프트 개선 확인 모달 */}
+      <PromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        originalPrompt={originalPromptForModal}
+        enhancedPrompt={enhancedPrompt}
+        onApply={handleApplyEnhancedPrompt}
+        onSendDirectly={handleSendEnhancedDirectly}
+        onRegenerate={handleEnhancePrompt}
+        isRegenerating={isEnhancingPrompt}
+      />
     </div>
   );
 }

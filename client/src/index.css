@@ -925,6 +925,47 @@ input:checked + .slider:before {
   color: var(--text-muted);
 }
 
+/* Prompt Enhancer Button */
+.enhance-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background-color: rgba(16, 163, 127, 0.12);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  height: 32px;
+}
+
+.enhance-btn:hover:not(:disabled) {
+  background-color: rgba(16, 163, 127, 0.22);
+  border-color: var(--accent-color);
+  transform: translateY(-1px);
+}
+
+.enhance-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--border-color);
+  background-color: transparent;
+  color: var(--text-muted);
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .send-btn {
   background-color: var(--text-main);
   color: var(--bg-main);
@@ -960,4 +1001,193 @@ input:checked + .slider:before {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 8px;
+}
+
+/* Modal Styles */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-container {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: scaleUp 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-description {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.prompt-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.prompt-box {
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.prompt-box.enhanced {
+  background-color: rgba(16, 163, 127, 0.05);
+  border-color: rgba(16, 163, 127, 0.3);
+}
+
+.prompt-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.prompt-box-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.prompt-box-label.highlight {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent-color);
+  margin-bottom: 0;
+}
+
+.prompt-box-content {
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.enhanced-content {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.enhanced-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.enhanced-content::-webkit-scrollbar-thumb {
+  background-color: rgba(16, 163, 127, 0.3);
+  border-radius: 3px;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  background-color: var(--bg-sidebar);
+}
+
+.modal-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.modal-btn.secondary {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.modal-btn.secondary:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.modal-btn.outline {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+.modal-btn.outline:hover {
+  background-color: var(--bg-hover);
+}
+
+.modal-btn.primary {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.modal-btn.primary:hover {
+  background-color: var(--accent-hover);
 }

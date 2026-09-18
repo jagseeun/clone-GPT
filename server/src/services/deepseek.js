@@ -102,3 +102,55 @@ export async function* generateDeepSeekStream(messages, globalMemory = [], selec
     yield { type: 'content', text: `\n\n${userFriendlyError}` };
   }
 }
+
+/**
+ * 프롬프트 개선 (Prompt Optimization) AI 함수
+ * @param {string} rawPrompt - 사용자가 입력한 원본 프롬프트
+ * @returns {Promise<string>} 프롬프트 엔지니어링 기법(페르소나, 맥락, 제약사항, 출력양식)이 적용된 고급 프롬프트
+ */
+export async function optimizePrompt(rawPrompt) {
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+
+  if (!apiKey) {
+    // API 키 미등록 시 시뮬레이션 개선 결과 반환
+    return `당신은 해당 분야의 15년 경력 최고 전문가입니다. 다음 주제에 대해 초보자도 이해하기 쉬우면서도 실무에서 바로 쓸 수 있는 깊이 있는 가이드를 작성해주세요.\n\n[요구 사항]:\n1. 핵심 개념과 배경 설명\n2. 실전 예시 및 구체적인 단계별 실행 방법\n3. 흔히 하는 실수와 주의할 점 3가지\n\n주제: "${rawPrompt}"`;
+  }
+
+  const openai = new OpenAI({
+    baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+    apiKey: apiKey,
+    timeout: 30000,
+  });
+
+  const systemInstruction = 
+    `당신은 세계 최고의 AI 프롬프트 엔지니어링 전문가입니다.
+사용자가 입력한 단순하거나 모호한 원본 프롬프트를 분석하여, AI가 가장 정확하고 탁월한 고품질 답변을 생성할 수 있도록 완벽한 '마스터 프롬프트'로 개선하세요.
+
+[필수 적용 프롬프트 엔지니어링 기법]:
+1. 역할 부여 (Persona Assignment): 질문의 주제에 완벽히 부합하는 최고 권위자 페르소나 부여 (예: "당신은 10년 차 수석 소프트웨어 아키텍트입니다.")
+2. 구체적인 배경 및 맥락 설정 (Context & Objective): 사용자가 궁극적으로 얻고자 하는 바를 명확화
+3. 단계별 생각 유도 (Chain-of-Thought): 체계적이고 논리적인 분석 단계 명시
+4. 구조화된 출력 형식 (Output Formatting): 마크다운 문법, 표, 코드 블록, 글머리 기호 등 최적의 가독성을 갖춘 서식 지정
+5. 주의점 및 실전 팁 (Edge Cases & Best Practices): 뻔한 내용이 아닌 실질적인 인사이트를 요구
+
+[출력 규칙]:
+- "개선된 프롬프트입니다:" 같은 불필요한 서두나 인사말, 사족을 절대 출력하지 마세요.
+- 오직 AI에게 바로 전달할 수 있는 **개선된 프롬프트 본문 내용만** 깔끔하게 출력하세요.
+- 한국어로 작성하세요.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: `다음 원본 프롬프트를 최고 수준의 프롬프트로 개선해줘:\n"${rawPrompt}"` },
+      ],
+      temperature: 0.7,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || rawPrompt;
+  } catch (error) {
+    console.error('Prompt Optimization Error:', error);
+    throw new Error('프롬프트 개선 중 오류가 발생했습니다: ' + error.message);
+  }
+}

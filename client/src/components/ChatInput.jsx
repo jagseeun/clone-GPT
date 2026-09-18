@@ -1,7 +1,15 @@
 import React, { useRef, useEffect } from 'react';
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, Square, Sparkles } from 'lucide-react';
 
-export default function ChatInput({ input, setInput, onSend, onStop, isLoading }) {
+export default function ChatInput({
+  input,
+  setInput,
+  onSend,
+  onStop,
+  isLoading,
+  onEnhancePrompt,
+  isEnhancing,
+}) {
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -27,12 +35,29 @@ export default function ChatInput({ input, setInput, onSend, onStop, isLoading }
           ref={textareaRef}
           className="chat-textarea"
           rows={1}
-          placeholder={isLoading ? '답변을 생성하는 중입니다...' : '메시지를 입력하세요... (Enter로 전송, Shift + Enter로 줄바꿈)'}
+          placeholder={
+            isLoading
+              ? '답변을 생성하는 중입니다...'
+              : '메시지를 입력하세요... (Enter로 전송, Shift + Enter로 줄바꿈)'
+          }
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
         />
+
+        {/* AI 프롬프트 개선 버튼 */}
+        <button
+          className="enhance-btn"
+          onClick={onEnhancePrompt}
+          disabled={!input.trim() || isLoading || isEnhancing}
+          title="입력한 질문을 AI 최고급 마스터 프롬프트로 개선합니다"
+        >
+          <Sparkles size={14} color="#10a37f" className={isEnhancing ? 'spin-animation' : ''} />
+          <span>{isEnhancing ? '개선 중...' : '프롬프트 개선'}</span>
+        </button>
+
+        {/* 전송 / 생성 중단 버튼 */}
         {isLoading ? (
           <button
             className="send-btn stop-btn"
