@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import WelcomeScreen from './components/WelcomeScreen.jsx';
 import ChatArea from './components/ChatArea.jsx';
 import ChatInput from './components/ChatInput.jsx';
-import { PanelLeft, ChevronDown, SquarePen } from 'lucide-react';
+import { PanelLeft, ChevronDown, SquarePen, KeyRound, X } from 'lucide-react';
 
 export default function App() {
   const [conversations, setConversations] = useState([]);
@@ -11,9 +11,27 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [apiConfig, setApiConfig] = useState({ hasApiKey: false, model: 'deepseek-chat' });
+  const [showBanner, setShowBanner] = useState(true);
 
-  // 대화 목록 불러오기
+  const abortControllerRef = useRef(null);
+
+  // 1. 서버 설정 및 API 키 상태 조회
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        setApiConfig(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch server config:', err);
+    }
+  };
+
+  // 2. 대화 목록 불러오기
   const fetchConversations = async () => {
     try {
       const res = await fetch('/api/conversations');
@@ -27,11 +45,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    fetchConfig();
     fetchConversations();
   }, []);
 
-  // 특정 대화 선택 시 메시지 로드
+  // 3. 특정 대화 선택 시 메시지 로드
   const handleSelectConversation = async (id) => {
+    if (isLoading) handleStopGeneration();
     try {
       setCurrentId(id);
       const res = await fetch(`/api/conversations/${id}`);
@@ -44,15 +64,17 @@ export default function App() {
     }
   };
 
-  // 새로운 대화 시작 (화면 초기화)
+  // 4. 새로운 대화 시작 (화면 리셋)
   const handleNewChat = () => {
+    if (isLoading) handleStopGeneration();
     setCurrentId(null);
     setMessages([]);
     setInput('');
   };
 
-  // 대화방 삭제
+  // 5. 대화방 삭제
   const handleDeleteConversation = async (id) => {
+    if (isLoading && currentId === id) handleStopGeneration();
     try {
       const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -66,7 +88,17 @@ export default function App() {
     }
   };
 
-  // 메시지 전송
+  // 6. 생성 중지(Abort) 핸들러
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setStreamingMessageId(null);
+  };
+
+  // 7. [3주차 핵심] DeepSeek 실시간 SSE 스트리밍 메시지 전송
   const handleSend = async () => {
     const text = input.trim();
     if (!text || isLoading) return;
@@ -77,9 +109,9 @@ export default function App() {
     let convId = currentId;
 
     try {
-      // 대화방이 없는 상태(신규 대화)라면 먼저 대화방 생성
+      // 신규 대화인 경우 대화방 생성
       if (!convId) {
-        const title = text.length > 20 ? text.slice(0, 20) + '...' : text;
+        const title = text.length > 25 ? text.slice(0, 25) + '...' : text;
         const convRes = await fetch('/api/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -93,42 +125,119 @@ export default function App() {
         }
       }
 
-      // 낙관적 UI 업데이트 (사용자 메시지 선반영)
+      // 사용자 메시지 낙관적 UI 추가
       const tempUserMsg = {
-        id: 'temp-' + Date.now(),
+        id: 'user-temp-' + Date.now(),
         role: 'user',
         content: text,
       };
-      setMessages((prev) => [...prev, tempUserMsg]);
 
-      // 백엔드로 메시지 전송
-      const res = await fetch(`/api/conversations/${convId}/messages`, {
+      // AI 답변을 담을 스트리밍 메시지 임시 생성
+      const tempAiMsgId = 'ai-stream-' + Date.now();
+      const tempAiMsg = {
+        id: tempAiMsgId,
+        role: 'assistant',
+        content: '',
+      };
+
+      setMessages((prev) => [...prev, tempUserMsg, tempAiMsg]);
+      setStreamingMessageId(tempAiMsgId);
+
+      // AbortController 준비
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // 스트리밍 API 호출
+      const response = await fetch(`/api/conversations/${convId}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: text }),
+        signal: controller.signal,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) => [
-          ...prev.filter((m) => m.id !== tempUserMsg.id),
-          data.userMessage,
-          data.assistantMessage,
-        ]);
-        fetchConversations();
+      if (!response.ok) {
+        throw new Error(`서버 응답 오류 (HTTP ${response.status})`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (!trimmed.startsWith('data:')) continue;
+
+          const jsonStr = trimmed.replace(/^data:\s*/, '');
+          try {
+            const data = JSON.parse(jsonStr);
+
+            if (data.type === 'user_saved') {
+              // 실제 DB 저장된 사용자 메시지 ID로 교체
+              setMessages((prev) =>
+                prev.map((m) => (m.id === tempUserMsg.id ? data.userMessage : m))
+              );
+            } else if (data.type === 'chunk') {
+              // AI 답변 실시간 누적 (타이핑 스트리밍 효과)
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === tempAiMsgId
+                    ? { ...m, content: m.content + data.chunk }
+                    : m
+                )
+              );
+            } else if (data.type === 'done') {
+              // 스트림 완료 후 최종 저장 메시지로 교체
+              setMessages((prev) =>
+                prev.map((m) => (m.id === tempAiMsgId ? data.assistantMessage : m))
+              );
+              fetchConversations();
+            } else if (data.type === 'error') {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === tempAiMsgId
+                    ? { ...m, content: m.content + `\n\n⚠️ ${data.error}` }
+                    : m
+                )
+              );
+            }
+          } catch (e) {
+            console.warn('SSE Parse error:', e);
+          }
+        }
       }
     } catch (err) {
-      console.error('Failed to send message:', err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: 'err-' + Date.now(),
-          role: 'assistant',
-          content: '⚠️ 메시지 전송 중 오류가 발생했습니다. 백엔드 서버 상태를 확인해주세요.',
-        },
-      ]);
+      if (err.name === 'AbortError') {
+        console.log('Stream stopped by user');
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === streamingMessageId
+              ? { ...m, content: m.content + '\n\n*(사용자에 의해 생성이 중단되었습니다)*' }
+              : m
+          )
+        );
+      } else {
+        console.error('Failed to send message:', err);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: 'err-' + Date.now(),
+            role: 'assistant',
+            content: `⚠️ 메시지 전송 중 오류가 발생했습니다: ${err.message}`,
+          },
+        ]);
+      }
     } finally {
       setIsLoading(false);
+      setStreamingMessageId(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -145,6 +254,22 @@ export default function App() {
       />
 
       <main className="main-content">
+        {/* 상단 알림 배너 (DeepSeek API 키 미등록 시 표시) */}
+        {!apiConfig.hasApiKey && showBanner && (
+          <div className="api-key-banner">
+            <div className="banner-content">
+              <KeyRound size={16} className="banner-icon" />
+              <span>
+                <strong>DeepSeek API 키 안내:</strong> <code>server/.env</code> 파일에 <code>DEEPSEEK_API_KEY</code>를 설정하면 실제 AI 모델의 답변을 받아볼 수 있습니다. (현재 시뮬레이션 모드)
+              </span>
+            </div>
+            <button className="banner-close-btn" onClick={() => setShowBanner(false)}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {/* 상단 네비게이션 헤더 */}
         <header className="top-bar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {!isSidebarOpen && (
@@ -158,7 +283,7 @@ export default function App() {
             )}
             <button className="model-selector">
               <span>CloneGPT</span>
-              <span className="model-tag">DeepSeek</span>
+              <span className="model-tag">{apiConfig.model || 'deepseek-chat'}</span>
               <ChevronDown size={14} />
             </button>
           </div>
@@ -172,16 +297,23 @@ export default function App() {
           </button>
         </header>
 
+        {/* 메인 화면 (빈 대화) vs 채팅 화면 */}
         {messages.length === 0 ? (
           <WelcomeScreen onSelectPrompt={(prompt) => setInput(prompt)} />
         ) : (
-          <ChatArea messages={messages} isLoading={isLoading} />
+          <ChatArea
+            messages={messages}
+            isLoading={isLoading}
+            streamingMessageId={streamingMessageId}
+          />
         )}
 
+        {/* 입력창 및 전송/중단 버튼 */}
         <ChatInput
           input={input}
           setInput={setInput}
           onSend={handleSend}
+          onStop={handleStopGeneration}
           isLoading={isLoading}
         />
       </main>

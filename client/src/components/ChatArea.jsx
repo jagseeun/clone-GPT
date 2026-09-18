@@ -1,9 +1,49 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Bot, User, Copy, Check } from 'lucide-react';
 
-export default function ChatArea({ messages, isLoading }) {
+// 개별 코드 블록 컴포넌트 (언어 표시 + 원클릭 복사 버튼)
+function CodeBlock({ className, children }) {
+  const [copied, setCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match[1] : '';
+  const codeText = String(children).replace(/\n$/, '');
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="code-block-wrapper">
+      <div className="code-block-header">
+        <span className="code-lang">{language || 'code'}</span>
+        <button className="code-copy-btn" onClick={handleCopy} title="코드 복사">
+          {copied ? (
+            <>
+              <Check size={13} color="#10a37f" />
+              <span style={{ color: '#10a37f' }}>복사됨!</span>
+            </>
+          ) : (
+            <>
+              <Copy size={13} />
+              <span>코드 복사</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="code-block-pre">
+        <code>{children}</code>
+      </pre>
+    </div>
+  );
+}
+
+export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   const scrollRef = useRef(null);
-  const [copiedId, setCopiedId] = React.useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -11,10 +51,10 @@ export default function ChatArea({ messages, isLoading }) {
     }
   }, [messages, isLoading]);
 
-  const handleCopy = (id, text) => {
+  const handleCopyMessage = (id, text) => {
     navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    setCopiedMessageId(id);
+    setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
   return (
@@ -22,6 +62,8 @@ export default function ChatArea({ messages, isLoading }) {
       <div className="chat-messages-container">
         {messages.map((msg, idx) => {
           const isUser = msg.role === 'user';
+          const isStreaming = msg.id === streamingMessageId;
+
           return (
             <div key={msg.id || idx} className={`message-row ${isUser ? 'user' : 'assistant'}`}>
               {!isUser && (
@@ -30,19 +72,47 @@ export default function ChatArea({ messages, isLoading }) {
                 </div>
               )}
               <div className={`message-bubble ${isUser ? 'user' : 'assistant'}`}>
-                <div className="message-content">
-                  {msg.content}
-                </div>
-                {!isUser && (
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                    <button
-                      className="icon-btn"
-                      style={{ padding: '4px', fontSize: '12px' }}
-                      onClick={() => handleCopy(msg.id || idx, msg.content)}
-                      title="메시지 복사"
+                {isUser ? (
+                  <div className="message-content user-text">{msg.content}</div>
+                ) : (
+                  <div className="message-content markdown-body">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ node, inline, className, children, ...props }) {
+                          if (inline) {
+                            return <code className="inline-code" {...props}>{children}</code>;
+                          }
+                          return (
+                            <CodeBlock className={className} {...props}>
+                              {children}
+                            </CodeBlock>
+                          );
+                        },
+                      }}
                     >
-                      {copiedId === (msg.id || idx) ? <Check size={14} color="#10a37f" /> : <Copy size={14} />}
-                    </button>
+                      {msg.content}
+                    </ReactMarkdown>
+
+                    {isStreaming && (
+                      <span className="blinking-cursor">▍</span>
+                    )}
+
+                    {!isStreaming && msg.content && (
+                      <div className="message-actions">
+                        <button
+                          className="icon-btn action-btn"
+                          onClick={() => handleCopyMessage(msg.id || idx, msg.content)}
+                          title="답변 전체 복사"
+                        >
+                          {copiedMessageId === (msg.id || idx) ? (
+                            <Check size={14} color="#10a37f" />
+                          ) : (
+                            <Copy size={14} />
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -55,7 +125,7 @@ export default function ChatArea({ messages, isLoading }) {
           );
         })}
 
-        {isLoading && (
+        {isLoading && !streamingMessageId && (
           <div className="message-row assistant">
             <div className="avatar bot-avatar">
               <Bot size={18} />
