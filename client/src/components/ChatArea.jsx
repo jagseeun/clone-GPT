@@ -1,14 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, User, Copy, Check } from 'lucide-react';
+import { Bot, User, Copy, Check, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+
+// 텍스트 추출 헬퍼 함수
+function extractText(node) {
+  if (typeof node === 'string') return node;
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (node?.props?.children) return extractText(node.props.children);
+  return String(node || '');
+}
 
 // 개별 코드 블록 컴포넌트 (언어 표시 + 원클릭 복사 버튼)
-function CodeBlock({ className, children }) {
+function CodeBlock({ language, codeText, children }) {
   const [copied, setCopied] = useState(false);
-  const match = /language-(\w+)/.exec(className || '');
-  const language = match ? match[1] : '';
-  const codeText = String(children).replace(/\n$/, '');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(codeText);
@@ -41,6 +46,34 @@ function CodeBlock({ className, children }) {
   );
 }
 
+// DeepSeek-R1 생각 과정 (Reasoning Process) 컴포넌트
+function ReasoningBox({ reasoning, isThinking }) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  if (!reasoning && !isThinking) return null;
+
+  return (
+    <div className="reasoning-wrapper">
+      <button
+        className="reasoning-toggle-btn"
+        onClick={() => setIsOpen(!isOpen)}
+        title="생각 과정 접기/펼치기"
+      >
+        <Sparkles size={14} color="#10a37f" />
+        <span>{isThinking ? '추론 및 생각 중...' : '생각 과정 (Reasoning)'}</span>
+        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+
+      {isOpen && (
+        <div className="reasoning-box">
+          {reasoning || '질문의 핵심을 분석하고 최적의 답변을 추론하는 중입니다...'}
+          {isThinking && <span className="blinking-cursor">▍</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   const scrollRef = useRef(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
@@ -63,6 +96,8 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
         {messages.map((msg, idx) => {
           const isUser = msg.role === 'user';
           const isStreaming = msg.id === streamingMessageId;
+          const hasReasoning = !!msg.reasoning;
+          const isThinking = isStreaming && hasReasoning && !msg.content;
 
           return (
             <div key={msg.id || idx} className={`message-row ${isUser ? 'user' : 'assistant'}`}>
@@ -76,25 +111,56 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                   <div className="message-content user-text">{msg.content}</div>
                 ) : (
                   <div className="message-content markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code({ node, inline, className, children, ...props }) {
-                          if (inline) {
-                            return <code className="inline-code" {...props}>{children}</code>;
-                          }
-                          return (
-                            <CodeBlock className={className} {...props}>
-                              {children}
-                            </CodeBlock>
-                          );
-                        },
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+                    {/* DeepSeek-R1 생각 과정 박스 */}
+                    {(hasReasoning || isThinking) && (
+                      <ReasoningBox
+                        reasoning={msg.reasoning}
+                        isThinking={isThinking}
+                      />
+                    )}
 
-                    {isStreaming && (
+                    {/* 본문 마크다운 */}
+                    {msg.content ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          // pre 태그 중첩 방지: 내부 code 태그가 CodeBlock으로 렌더링
+                          pre({ children }) {
+                            return <>{children}</>;
+                          },
+                          code({ node, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const rawText = extractText(children).replace(/\n$/, '');
+                            const isBlock = match || rawText.includes('\n');
+
+                            if (!isBlock) {
+                              return (
+                                <code className="inline-code" {...props}>
+                                  {children}
+                                </code>
+                              );
+                            }
+
+                            return (
+                              <CodeBlock
+                                language={match ? match[1] : ''}
+                                codeText={rawText}
+                              >
+                                {children}
+                              </CodeBlock>
+                            );
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      isStreaming && !hasReasoning && (
+                        <span className="blinking-cursor">▍</span>
+                      )
+                    )}
+
+                    {isStreaming && msg.content && (
                       <span className="blinking-cursor">▍</span>
                     )}
 

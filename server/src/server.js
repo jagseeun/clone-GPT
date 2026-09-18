@@ -56,7 +56,11 @@ app.get('/api/health', (req, res) => {
 app.get('/api/config', (req, res) => {
   res.json({
     hasApiKey: !!process.env.DEEPSEEK_API_KEY?.trim(),
-    model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    defaultModel: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    availableModels: [
+      { id: 'deepseek-chat', name: 'DeepSeek-V3 (Chat)', desc: '빠르고 스마트한 대화 & 코딩 최적화' },
+      { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (Reasoner)', desc: 'OpenAI o1급 심층 사고 & 복잡한 추론 특화' },
+    ]
   });
 });
 
@@ -153,7 +157,7 @@ app.delete('/api/conversations/:id', async (req, res) => {
 // 6. [3주차 핵심] DeepSeek 실시간 SSE 스트리밍 메시지 전송 엔드포인트
 app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   const { id } = req.params;
-  const { content, useGlobalMemory = true } = req.body;
+  const { content, useGlobalMemory = true, model = 'deepseek-chat' } = req.body;
 
   if (!content || !content.trim()) {
     return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
@@ -167,12 +171,9 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  let isAborted = false;
+  let isClientConnected = true;
   res.on('close', () => {
-    if (!res.writableEnded) {
-      isAborted = true;
-      console.log(`[Stream Aborted] Client closed connection for conv ${id}`);
-    }
+    isClientConnected = false;
   });
 
   // 사용자 메시지 생성 및 DB 저장
@@ -242,24 +243,35 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
 
   // DeepSeek AI 스트리밍 생성
   let fullAiResponse = '';
+  let fullReasoning = '';
 
   try {
-    const stream = generateDeepSeekStream(historyMessages, globalMemory);
+    const stream = generateDeepSeekStream(historyMessages, globalMemory, model);
 
     for await (const chunk of stream) {
-      if (isAborted) {
-        console.log(`[Stream Aborted] Client closed connection for conv ${id}`);
-        break;
+      if (chunk.type === 'reasoning') {
+        fullReasoning += chunk.text;
+        if (isClientConnected) {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'reasoning', chunk: chunk.text })}\n\n`);
+          } catch (e) {}
+        }
+      } else if (chunk.type === 'content') {
+        fullAiResponse += chunk.text;
+        if (isClientConnected) {
+          try {
+            res.write(`data: ${JSON.stringify({ type: 'chunk', chunk: chunk.text })}\n\n`);
+          } catch (e) {}
+        }
       }
-      fullAiResponse += chunk;
-      res.write(`data: ${JSON.stringify({ type: 'chunk', chunk })}\n\n`);
     }
 
-    // AI 답변 DB 저장
+    // AI 답변 DB 저장 (화면을 전환했어도 백그라운드에서 완료 후 안전하게 DB 저장)
     const aiMsg = {
       id: 'ai-' + Date.now(),
       role: 'assistant',
       content: fullAiResponse,
+      reasoning: fullReasoning,
       created_at: new Date().toISOString()
     };
 
@@ -281,12 +293,16 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
       mockMessages[id].push(aiMsg);
     }
 
-    res.write(`data: ${JSON.stringify({ type: 'done', assistantMessage: aiMsg })}\n\n`);
-    res.end();
+    if (isClientConnected) {
+      res.write(`data: ${JSON.stringify({ type: 'done', assistantMessage: aiMsg })}\n\n`);
+      res.end();
+    }
   } catch (error) {
     console.error('Streaming error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
-    res.end();
+    if (isClientConnected) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
   }
 });
 

@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar.jsx';
 import WelcomeScreen from './components/WelcomeScreen.jsx';
 import ChatArea from './components/ChatArea.jsx';
 import ChatInput from './components/ChatInput.jsx';
-import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain } from 'lucide-react';
+import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain, Check, Sparkles, Zap } from 'lucide-react';
 
 export default function App() {
   const [conversations, setConversations] = useState([]);
@@ -13,7 +13,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [apiConfig, setApiConfig] = useState({ hasApiKey: false, model: 'deepseek-chat' });
+  const [apiConfig, setApiConfig] = useState({
+    hasApiKey: false,
+    defaultModel: 'deepseek-chat',
+    availableModels: []
+  });
   const [showBanner, setShowBanner] = useState(true);
 
   // 테마 상태 (Dark / Light)
@@ -26,7 +30,20 @@ export default function App() {
     return localStorage.getItem('clonegpt_memory') !== 'false';
   });
 
+  // 선택된 AI 모델 (deepseek-chat 또는 deepseek-reasoner)
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem('clonegpt_model') || 'deepseek-chat';
+  });
+
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  // 현재 보고 있는 대화방 ID를 ref로 추적 (비동기 스트림 중 방 이동 감지용)
+  const currentIdRef = useRef(currentId);
+  useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
 
   // 테마 변경 반영
   useEffect(() => {
@@ -38,6 +55,22 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('clonegpt_memory', useGlobalMemory ? 'true' : 'false');
   }, [useGlobalMemory]);
+
+  // 모델 설정 저장
+  useEffect(() => {
+    localStorage.setItem('clonegpt_model', selectedModel);
+  }, [selectedModel]);
+
+  // 바깥 클릭 시 모델 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target)) {
+        setIsModelMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleToggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -78,9 +111,8 @@ export default function App() {
     fetchConversations();
   }, []);
 
-  // 3. 특정 대화 선택 시 메시지 로드
+  // 3. 특정 대화방 클릭 시 메시지 로드 (다른 방 생성은 백그라운드에서 계속 진행되도록 둠)
   const handleSelectConversation = async (id) => {
-    if (isLoading) handleStopGeneration();
     try {
       setCurrentId(id);
       const res = await fetch(`/api/conversations/${id}`);
@@ -95,7 +127,6 @@ export default function App() {
 
   // 4. 새로운 대화 시작 (화면 리셋)
   const handleNewChat = () => {
-    if (isLoading) handleStopGeneration();
     setCurrentId(null);
     setMessages([]);
     setInput('');
@@ -117,7 +148,7 @@ export default function App() {
     }
   };
 
-  // 6. 생성 중지(Abort) 핸들러
+  // 6. 사용자가 명시적으로 [생성 중지(■)]를 눌렀을 때만 중단
   const handleStopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -127,7 +158,7 @@ export default function App() {
     setStreamingMessageId(null);
   };
 
-  // 7. [3주차 핵심] DeepSeek 실시간 SSE 스트리밍 메시지 전송
+  // 7. DeepSeek 실시간 SSE 스트리밍 메시지 전송
   const handleSend = async () => {
     const text = input.trim();
     if (!text || isLoading) return;
@@ -138,7 +169,7 @@ export default function App() {
     let convId = currentId;
 
     try {
-      // 신규 대화인 경우 대화방 생성
+      // 신규 대화인 경우 대화방 먼저 생성
       if (!convId) {
         const title = text.length > 25 ? text.slice(0, 25) + '...' : text;
         const convRes = await fetch('/api/conversations', {
@@ -154,7 +185,7 @@ export default function App() {
         }
       }
 
-      // 사용자 메시지 낙관적 UI 추가
+      // 사용자 메시지 낙관적 추가
       const tempUserMsg = {
         id: 'user-temp-' + Date.now(),
         role: 'user',
@@ -167,22 +198,23 @@ export default function App() {
         id: tempAiMsgId,
         role: 'assistant',
         content: '',
+        reasoning: '',
       };
 
       setMessages((prev) => [...prev, tempUserMsg, tempAiMsg]);
       setStreamingMessageId(tempAiMsgId);
 
-      // AbortController 준비
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // 스트리밍 API 호출 (전역 메모리 ON/OFF 상태 전달)
+      // 스트리밍 API 호출
       const response = await fetch(`/api/conversations/${convId}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: text,
           useGlobalMemory,
+          model: selectedModel,
         }),
         signal: controller.signal,
       });
@@ -211,31 +243,47 @@ export default function App() {
           try {
             const data = JSON.parse(jsonStr);
 
-            if (data.type === 'user_saved') {
-              setMessages((prev) =>
-                prev.map((m) => (m.id === tempUserMsg.id ? data.userMessage : m))
-              );
-            } else if (data.type === 'chunk') {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === tempAiMsgId
-                    ? { ...m, content: m.content + data.chunk }
-                    : m
-                )
-              );
-            } else if (data.type === 'done') {
-              setMessages((prev) =>
-                prev.map((m) => (m.id === tempAiMsgId ? data.assistantMessage : m))
-              );
-              fetchConversations();
-            } else if (data.type === 'error') {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === tempAiMsgId
-                    ? { ...m, content: m.content + `\n\n⚠️ ${data.error}` }
-                    : m
-                )
-              );
+            // 사용자가 현재 이 방을 보고 있을 때만 UI 갱신 (다른 방 보고 있으면 DB에만 저장되도록)
+            if (currentIdRef.current === convId) {
+              if (data.type === 'user_saved') {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === tempUserMsg.id ? data.userMessage : m))
+                );
+              } else if (data.type === 'reasoning') {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === tempAiMsgId
+                      ? { ...m, reasoning: (m.reasoning || '') + data.chunk }
+                      : m
+                  )
+                );
+              } else if (data.type === 'chunk') {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === tempAiMsgId
+                      ? { ...m, content: (m.content || '') + data.chunk }
+                      : m
+                  )
+                );
+              } else if (data.type === 'done') {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === tempAiMsgId ? data.assistantMessage : m))
+                );
+                fetchConversations();
+              } else if (data.type === 'error') {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === tempAiMsgId
+                      ? { ...m, content: m.content + `\n\n⚠️ ${data.error}` }
+                      : m
+                  )
+                );
+              }
+            } else {
+              // 사용자가 다른 방으로 이동한 경우, 사이드바 목록의 updated_at 갱신
+              if (data.type === 'done') {
+                fetchConversations();
+              }
             }
           } catch (e) {
             console.warn('SSE Parse error:', e);
@@ -245,23 +293,27 @@ export default function App() {
     } catch (err) {
       if (err.name === 'AbortError') {
         console.log('Stream stopped by user');
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === streamingMessageId
-              ? { ...m, content: m.content + '\n\n*(사용자에 의해 생성이 중단되었습니다)*' }
-              : m
-          )
-        );
+        if (currentIdRef.current === convId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === streamingMessageId
+                ? { ...m, content: m.content + '\n\n*(사용자에 의해 생성이 중단되었습니다)*' }
+                : m
+            )
+          );
+        }
       } else {
         console.error('Failed to send message:', err);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: 'err-' + Date.now(),
-            role: 'assistant',
-            content: `⚠️ 메시지 전송 중 오류가 발생했습니다: ${err.message}`,
-          },
-        ]);
+        if (currentIdRef.current === convId) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'err-' + Date.now(),
+              role: 'assistant',
+              content: `⚠️ 메시지 전송 중 오류가 발생했습니다: ${err.message}`,
+            },
+          ]);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -269,6 +321,25 @@ export default function App() {
       abortControllerRef.current = null;
     }
   };
+
+  const modelsList = [
+    {
+      id: 'deepseek-chat',
+      name: 'DeepSeek-V3',
+      tag: 'Chat',
+      icon: <Zap size={15} color="#10a37f" />,
+      desc: '빠르고 자연스러운 대화, 일상 질문, 코딩에 최적화된 최신 671B 모델',
+    },
+    {
+      id: 'deepseek-reasoner',
+      name: 'DeepSeek-R1',
+      tag: 'Reasoner',
+      icon: <Sparkles size={15} color="#8b5cf6" />,
+      desc: 'OpenAI o1급 심층 사고 모델. 생각 과정(Reasoning)을 거쳐 최고 난도 문제 해결',
+    },
+  ];
+
+  const currentModelObj = modelsList.find((m) => m.id === selectedModel) || modelsList[0];
 
   return (
     <div className="app-container">
@@ -314,11 +385,43 @@ export default function App() {
                 <PanelLeft size={20} />
               </button>
             )}
-            <button className="model-selector">
-              <span>CloneGPT</span>
-              <span className="model-tag">{apiConfig.model || 'deepseek-chat'}</span>
-              <ChevronDown size={14} />
-            </button>
+
+            {/* 모델 드롭다운 셀렉터 */}
+            <div className="model-selector-wrapper" ref={modelMenuRef}>
+              <button
+                className="model-selector"
+                onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                title="AI 모델 선택"
+              >
+                <span>CloneGPT</span>
+                <span className="model-tag">{currentModelObj.name}</span>
+                <ChevronDown size={14} />
+              </button>
+
+              {isModelMenuOpen && (
+                <div className="model-dropdown-menu">
+                  {modelsList.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`model-option-item ${selectedModel === m.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedModel(m.id);
+                        setIsModelMenuOpen(false);
+                      }}
+                    >
+                      <div style={{ marginTop: '2px' }}>{m.icon}</div>
+                      <div style={{ flex: 1 }}>
+                        <div className="model-option-name">
+                          <span>{m.name}</span>
+                          {selectedModel === m.id && <Check size={14} color="#10a37f" />}
+                        </div>
+                        <div className="model-option-desc">{m.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
