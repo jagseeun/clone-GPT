@@ -191,9 +191,15 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
         'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
         [id, userMsg.role, userMsg.content]
       );
-      // 최근 이전 대화 맥락 10개 조회 (질문과 어시스턴트 답변)
+      // 같은 대화방 내 최근 이전 대화 맥락 20개 조회 (질문과 답변 시간순 정렬)
       const prevResult = await pool.query(
-        'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT 15',
+        `SELECT role, content FROM (
+           SELECT role, content, created_at 
+           FROM messages 
+           WHERE conversation_id = $1 
+           ORDER BY created_at DESC 
+           LIMIT 20
+         ) sub ORDER BY created_at ASC`,
         [id]
       );
       historyMessages = prevResult.rows.map(r => ({ role: r.role, content: r.content }));
@@ -204,7 +210,7 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   } else {
     if (!mockMessages[id]) mockMessages[id] = [];
     mockMessages[id].push(userMsg);
-    historyMessages = mockMessages[id].map(m => ({ role: m.role, content: m.content }));
+    historyMessages = mockMessages[id].slice(-20).map(m => ({ role: m.role, content: m.content }));
   }
 
   // 사용자 메시지 전송 완료 이벤트 통지
