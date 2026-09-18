@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, MessageSquare, Trash2, PanelLeftClose, User } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, PanelLeftClose, User, Brain, Sun, Moon } from 'lucide-react';
 
 export default function Sidebar({
   isOpen,
@@ -9,6 +9,10 @@ export default function Sidebar({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  theme,
+  onToggleTheme,
+  useGlobalMemory,
+  onToggleMemory,
 }) {
   return (
     <aside className={`sidebar ${isOpen ? '' : 'closed'}`}>
@@ -60,14 +64,51 @@ export default function Sidebar({
         )}
       </div>
 
+      {/* 설정 및 기능 제어 푸터 */}
       <div className="sidebar-footer">
+        {/* 이전 대화 기억(전역 메모리) ON/OFF */}
+        <div
+          className="sidebar-setting-row"
+          onClick={onToggleMemory}
+          title="다른 대화방의 과거 기억을 참고할지 여부를 설정합니다"
+        >
+          <div className="setting-label">
+            <Brain size={16} color={useGlobalMemory ? '#10a37f' : 'var(--text-muted)'} />
+            <span>이전 대화 기억</span>
+          </div>
+          <label className="switch" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={useGlobalMemory}
+              onChange={onToggleMemory}
+            />
+            <span className="slider"></span>
+          </label>
+        </div>
+
+        {/* 라이트 / 다크 테마 전환 */}
+        <div
+          className="sidebar-setting-row"
+          onClick={onToggleTheme}
+          title="라이트 모드와 다크 모드를 전환합니다"
+        >
+          <div className="setting-label">
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            <span>{theme === 'dark' ? '라이트 모드' : '다크 모드'}</span>
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {theme === 'dark' ? 'Dark' : 'Light'}
+          </span>
+        </div>
+
+        {/* 사용자 프로필 배지 */}
         <div className="user-badge">
           <div className="avatar user-avatar">
             <User size={16} />
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '13px' }}>사용자</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CloneGPT Free Plan</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CloneGPT Pro</div>
           </div>
         </div>
       </div>

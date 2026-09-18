@@ -153,7 +153,7 @@ app.delete('/api/conversations/:id', async (req, res) => {
 // 6. [3주차 핵심] DeepSeek 실시간 SSE 스트리밍 메시지 전송 엔드포인트
 app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   const { id } = req.params;
-  const { content } = req.body;
+  const { content, useGlobalMemory = true } = req.body;
 
   if (!content || !content.trim()) {
     return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
@@ -184,6 +184,7 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   };
 
   let historyMessages = [];
+  let globalMemory = [];
 
   if (dbConnected) {
     try {
@@ -203,6 +204,21 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
         [id]
       );
       historyMessages = prevResult.rows.map(r => ({ role: r.role, content: r.content }));
+
+      // 전역 메모리가 켜져 있는 경우: 다른 이전 대화방의 최근 대화 기록 조회
+      if (useGlobalMemory) {
+        const globalResult = await pool.query(
+          `SELECT role, content FROM (
+             SELECT role, content, created_at 
+             FROM messages 
+             WHERE conversation_id != $1 
+             ORDER BY created_at DESC 
+             LIMIT 15
+           ) sub ORDER BY created_at ASC`,
+          [id]
+        );
+        globalMemory = globalResult.rows.map(r => ({ role: r.role, content: r.content }));
+      }
     } catch (err) {
       console.error('DB save user message error:', err.message);
       historyMessages = [{ role: 'user', content: trimmedContent }];
@@ -211,6 +227,14 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
     if (!mockMessages[id]) mockMessages[id] = [];
     mockMessages[id].push(userMsg);
     historyMessages = mockMessages[id].slice(-20).map(m => ({ role: m.role, content: m.content }));
+
+    if (useGlobalMemory) {
+      for (const [convKey, msgs] of Object.entries(mockMessages)) {
+        if (convKey !== id) {
+          globalMemory.push(...msgs.slice(-5).map(m => ({ role: m.role, content: m.content })));
+        }
+      }
+    }
   }
 
   // 사용자 메시지 전송 완료 이벤트 통지
@@ -220,7 +244,7 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   let fullAiResponse = '';
 
   try {
-    const stream = generateDeepSeekStream(historyMessages);
+    const stream = generateDeepSeekStream(historyMessages, globalMemory);
 
     for await (const chunk of stream) {
       if (isAborted) {

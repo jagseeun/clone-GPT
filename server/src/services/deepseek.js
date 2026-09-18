@@ -5,10 +5,11 @@ dotenv.config();
 
 /**
  * DeepSeek 스트리밍 AI 응답 생성 함수
- * @param {Array<{role: string, content: string}>} messages - 이전 대화 맥락을 포함한 메시지 배열
+ * @param {Array<{role: string, content: string}>} messages - 현재 대화방의 메시지 배열
+ * @param {Array<{role: string, content: string}>} globalMemory - 다른 이전 대화방들에서 수집된 전역 메모리 (선택 사항)
  * @returns {AsyncGenerator<string>} 스트리밍 텍스트 청크를 방출하는 제너레이터
  */
-export async function* generateDeepSeekStream(messages) {
+export async function* generateDeepSeekStream(messages, globalMemory = []) {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 
@@ -25,7 +26,6 @@ export async function* generateDeepSeekStream(messages) {
       `전송하신 질문: **"${lastUserMsg}"**\n\n` +
       `질문에 대한 임시 응답 예시입니다. API 키를 등록하시면 즉시 최신 DeepSeek-V3 모델의 실제 지능형 답변을 실시간으로 확인하실 수 있습니다! 🚀`;
 
-    // 글자 단위 스트리밍 효과 시뮬레이션
     const chunks = fallbackMessage.match(/.{1,4}/g) || [fallbackMessage];
     for (const chunk of chunks) {
       yield chunk;
@@ -41,11 +41,27 @@ export async function* generateDeepSeekStream(messages) {
     timeout: 60000,
   });
 
-  // 시스템 프롬프트가 없는 경우 친절한 어시스턴트 프롬프트 추가
+  // 시스템 프롬프트 구성 (전역 메모리 주입)
+  let systemPromptContent = 
+    'You are CloneGPT, a helpful, thoughtful, and knowledgeable AI assistant powered by DeepSeek. ' +
+    'Always respond helpfully, clearly, and format your responses using Markdown with code blocks where appropriate.';
+
+  if (globalMemory && globalMemory.length > 0) {
+    const memoryText = globalMemory
+      .map(m => `- ${m.role === 'user' ? '사용자' : 'CloneGPT'}: "${m.content.slice(0, 150)}"`)
+      .join('\n');
+
+    systemPromptContent += 
+      `\n\n[사용자의 다른 이전 대화방 기억(Cross-Session Memory)]:\n` +
+      `사용자가 이전에 다른 채팅방에서 나눈 최근 대화 요약입니다:\n` +
+      `${memoryText}\n` +
+      `사용자가 "내가 전에 뭐라고 했지?", "내가 내일 뭐 먹는다고 했더라?", 또는 과거 대화 내용이나 취향/일정을 물어보면, 이 이전 기억을 자연스럽게 참고하여 친절하게 답변하세요.`;
+  }
+
   const formattedMessages = [
     {
       role: 'system',
-      content: 'You are CloneGPT, a helpful, thoughtful, and knowledgeable AI assistant powered by DeepSeek. Always respond helpfully, clearly, and format your responses using Markdown with code blocks where appropriate.',
+      content: systemPromptContent,
     },
     ...messages,
   ];

@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar.jsx';
 import WelcomeScreen from './components/WelcomeScreen.jsx';
 import ChatArea from './components/ChatArea.jsx';
 import ChatInput from './components/ChatInput.jsx';
-import { PanelLeft, ChevronDown, SquarePen, KeyRound, X } from 'lucide-react';
+import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain } from 'lucide-react';
 
 export default function App() {
   const [conversations, setConversations] = useState([]);
@@ -16,7 +16,36 @@ export default function App() {
   const [apiConfig, setApiConfig] = useState({ hasApiKey: false, model: 'deepseek-chat' });
   const [showBanner, setShowBanner] = useState(true);
 
+  // 테마 상태 (Dark / Light)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('clonegpt_theme') || 'dark';
+  });
+
+  // 전역 메모리(이전 대화 기억) ON/OFF 상태
+  const [useGlobalMemory, setUseGlobalMemory] = useState(() => {
+    return localStorage.getItem('clonegpt_memory') !== 'false';
+  });
+
   const abortControllerRef = useRef(null);
+
+  // 테마 변경 반영
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('clonegpt_theme', theme);
+  }, [theme]);
+
+  // 메모리 설정 저장
+  useEffect(() => {
+    localStorage.setItem('clonegpt_memory', useGlobalMemory ? 'true' : 'false');
+  }, [useGlobalMemory]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  const handleToggleMemory = () => {
+    setUseGlobalMemory((prev) => !prev);
+  };
 
   // 1. 서버 설정 및 API 키 상태 조회
   const fetchConfig = async () => {
@@ -147,11 +176,14 @@ export default function App() {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // 스트리밍 API 호출
+      // 스트리밍 API 호출 (전역 메모리 ON/OFF 상태 전달)
       const response = await fetch(`/api/conversations/${convId}/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({
+          content: text,
+          useGlobalMemory,
+        }),
         signal: controller.signal,
       });
 
@@ -180,12 +212,10 @@ export default function App() {
             const data = JSON.parse(jsonStr);
 
             if (data.type === 'user_saved') {
-              // 실제 DB 저장된 사용자 메시지 ID로 교체
               setMessages((prev) =>
                 prev.map((m) => (m.id === tempUserMsg.id ? data.userMessage : m))
               );
             } else if (data.type === 'chunk') {
-              // AI 답변 실시간 누적 (타이핑 스트리밍 효과)
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === tempAiMsgId
@@ -194,7 +224,6 @@ export default function App() {
                 )
               );
             } else if (data.type === 'done') {
-              // 스트림 완료 후 최종 저장 메시지로 교체
               setMessages((prev) =>
                 prev.map((m) => (m.id === tempAiMsgId ? data.assistantMessage : m))
               );
@@ -251,16 +280,20 @@ export default function App() {
         onSelectConversation={handleSelectConversation}
         onNewChat={handleNewChat}
         onDeleteConversation={handleDeleteConversation}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        useGlobalMemory={useGlobalMemory}
+        onToggleMemory={handleToggleMemory}
       />
 
       <main className="main-content">
-        {/* 상단 알림 배너 (DeepSeek API 키 미등록 시 표시) */}
+        {/* 상단 알림 배너 */}
         {!apiConfig.hasApiKey && showBanner && (
           <div className="api-key-banner">
             <div className="banner-content">
               <KeyRound size={16} className="banner-icon" />
               <span>
-                <strong>DeepSeek API 키 안내:</strong> <code>server/.env</code> 파일에 <code>DEEPSEEK_API_KEY</code>를 설정하면 실제 AI 모델의 답변을 받아볼 수 있습니다. (현재 시뮬레이션 모드)
+                <strong>DeepSeek API 키 안내:</strong> <code>server/.env</code> 파일에 <code>DEEPSEEK_API_KEY</code>를 설정하면 실제 AI 모델의 답변을 받아볼 수 있습니다.
               </span>
             </div>
             <button className="banner-close-btn" onClick={() => setShowBanner(false)}>
@@ -271,7 +304,7 @@ export default function App() {
 
         {/* 상단 네비게이션 헤더 */}
         <header className="top-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {!isSidebarOpen && (
               <button
                 className="icon-btn"
@@ -288,13 +321,36 @@ export default function App() {
             </button>
           </div>
 
-          <button
-            className="icon-btn"
-            onClick={handleNewChat}
-            title="새 대화 시작"
-          >
-            <SquarePen size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* 전역 메모리 ON/OFF 버튼 */}
+            <button
+              className={`memory-pill-btn ${useGlobalMemory ? 'active' : ''}`}
+              onClick={handleToggleMemory}
+              title={`이전 대화 기억(전역 메모리): ${useGlobalMemory ? '켜짐 (다른 채팅방 기억 참고)' : '꺼짐 (대화방 독립)'}`}
+            >
+              <div className={`memory-dot ${useGlobalMemory ? 'active' : ''}`}></div>
+              <Brain size={14} />
+              <span>기억 {useGlobalMemory ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {/* 테마 토글 버튼 */}
+            <button
+              className="icon-btn"
+              onClick={handleToggleTheme}
+              title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            {/* 새 대화 버튼 */}
+            <button
+              className="icon-btn"
+              onClick={handleNewChat}
+              title="새 대화 시작"
+            >
+              <SquarePen size={18} />
+            </button>
+          </div>
         </header>
 
         {/* 메인 화면 (빈 대화) vs 채팅 화면 */}
