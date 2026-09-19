@@ -11,8 +11,6 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [apiConfig, setApiConfig] = useState({
     hasApiKey: false,
@@ -32,7 +30,7 @@ export default function App() {
     return localStorage.getItem('clonegpt_theme') || 'dark';
   });
 
-  // 전역 메모리(이전 대화 기억) ON/OFF 상태
+  // 전역 메모리(이전 대화 기억) ON/OFF 상태 (상단 헤더에서만 제어)
   const [useGlobalMemory, setUseGlobalMemory] = useState(() => {
     return localStorage.getItem('clonegpt_memory') !== 'false';
   });
@@ -44,7 +42,11 @@ export default function App() {
 
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const modelMenuRef = useRef(null);
-  const abortControllerRef = useRef(null);
+
+  // 대화방별 진행 중인 백그라운드 스트림 저장소 (Map: convId -> { tempAiMsgId, userMsg, aiMsg, controller, isDone })
+  const activeStreamsRef = useRef(new Map());
+  // 강제 UI 리렌더링 트리거용 상태
+  const [, setStreamTick] = useState(0);
 
   // 현재 보고 있는 대화방 ID를 ref로 추적
   const currentIdRef = useRef(currentId);
@@ -118,21 +120,35 @@ export default function App() {
     fetchConversations();
   }, []);
 
-  // 3. 특정 대화방 클릭 시 메시지 로드
+  // 3. 특정 대화방 클릭 시 메시지 로드 (진행 중인 스트림이 있다면 함께 복원)
   const handleSelectConversation = async (id) => {
     try {
       setCurrentId(id);
       const res = await fetch(`/api/conversations/${id}`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
+        let loadedMessages = data.messages || [];
+
+        // 이 방에 아직 끝나지 않은 백그라운드 스트림이 있다면 합쳐서 표시!
+        if (activeStreamsRef.current.has(id)) {
+          const active = activeStreamsRef.current.get(id);
+          if (!active.isDone) {
+            const hasTemp = loadedMessages.some((m) => m.id === active.tempAiMsgId);
+            if (!hasTemp) {
+              const withoutUser = loadedMessages.filter((m) => m.id !== active.userMsg.id);
+              loadedMessages = [...withoutUser, active.userMsg, active.aiMsg];
+            }
+          }
+        }
+
+        setMessages(loadedMessages);
       }
     } catch (err) {
       console.error('Failed to load messages:', err);
     }
   };
 
-  // 4. 새로운 대화 시작
+  // 4. 새로운 대화 시작 (메인 화면)
   const handleNewChat = () => {
     setCurrentId(null);
     setMessages([]);
@@ -141,7 +157,10 @@ export default function App() {
 
   // 5. 대화방 삭제
   const handleDeleteConversation = async (id) => {
-    if (isLoading && currentId === id) handleStopGeneration();
+    if (activeStreamsRef.current.has(id)) {
+      activeStreamsRef.current.get(id).controller?.abort();
+      activeStreamsRef.current.delete(id);
+    }
     try {
       const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
       if (res.ok) {
@@ -155,17 +174,17 @@ export default function App() {
     }
   };
 
-  // 6. 생성 중지(Abort)
+  // 6. 현재 보고 있는 방의 생성 중지(Abort)
   const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+    if (currentId && activeStreamsRef.current.has(currentId)) {
+      const active = activeStreamsRef.current.get(currentId);
+      active.controller?.abort();
+      activeStreamsRef.current.delete(currentId);
+      setStreamTick((t) => t + 1);
     }
-    setIsLoading(false);
-    setStreamingMessageId(null);
   };
 
-  // 7. [신규 기능] AI 프롬프트 개선 실행
+  // 7. AI 프롬프트 개선 실행
   const handleEnhancePrompt = async () => {
     const raw = input.trim();
     if (!raw || isEnhancingPrompt) return;
@@ -196,25 +215,29 @@ export default function App() {
     }
   };
 
-  // 개선된 프롬프트를 입력창에 적용하기
+  // 개선된 프롬프트를 입력창에 적용
   const handleApplyEnhancedPrompt = (newPrompt) => {
     setInput(newPrompt);
     setShowPromptModal(false);
   };
 
-  // 개선된 프롬프트로 바로 전송하기
+  // 개선된 프롬프트로 바로 전송
   const handleSendEnhancedDirectly = (newPrompt) => {
     setShowPromptModal(false);
     executeSendMessage(newPrompt);
   };
 
-  // 8. 메시지 전송 로직 분리
+  // 8. 메시지 전송 로직 (다중 세션 백그라운드 스트리밍 보존)
   const executeSendMessage = async (textToSend) => {
     const text = textToSend.trim();
-    if (!text || isLoading) return;
+    if (!text) return;
+
+    // 현재 방이 이미 생성 중이면 중복 전송 방지
+    if (currentId && activeStreamsRef.current.has(currentId) && !activeStreamsRef.current.get(currentId).isDone) {
+      return;
+    }
 
     setInput('');
-    setIsLoading(true);
 
     let convId = currentId;
 
@@ -235,26 +258,38 @@ export default function App() {
         }
       }
 
-      // 사용자 메시지 낙관적 추가
-      const tempUserMsg = {
+      // 사용자 메시지 생성
+      const userMsg = {
         id: 'user-temp-' + Date.now(),
         role: 'user',
         content: text,
       };
 
+      // AI 답변을 담을 스트리밍 메시지 임시 생성
       const tempAiMsgId = 'ai-stream-' + Date.now();
-      const tempAiMsg = {
+      const aiMsg = {
         id: tempAiMsgId,
         role: 'assistant',
         content: '',
         reasoning: '',
       };
 
-      setMessages((prev) => [...prev, tempUserMsg, tempAiMsg]);
-      setStreamingMessageId(tempAiMsgId);
+      // 현재 방을 보고 있으면 화면에 즉시 낙관적 반영
+      if (currentIdRef.current === convId || !currentIdRef.current) {
+        setMessages((prev) => [...prev, userMsg, aiMsg]);
+      }
 
       const controller = new AbortController();
-      abortControllerRef.current = controller;
+
+      // 세션별 진행 스트림 맵에 등록 (사용자가 다른 방을 가도 여기서 안전하게 보존)
+      activeStreamsRef.current.set(convId, {
+        tempAiMsgId,
+        userMsg,
+        aiMsg,
+        controller,
+        isDone: false,
+      });
+      setStreamTick((t) => t + 1);
 
       // 스트리밍 API 호출
       const response = await fetch(`/api/conversations/${convId}/messages/stream`, {
@@ -291,34 +326,59 @@ export default function App() {
           const jsonStr = trimmed.replace(/^data:\s*/, '');
           try {
             const data = JSON.parse(jsonStr);
+            const streamObj = activeStreamsRef.current.get(convId);
 
-            if (currentIdRef.current === convId) {
-              if (data.type === 'user_saved') {
+            if (data.type === 'user_saved') {
+              if (streamObj) streamObj.userMsg = data.userMessage;
+              if (currentIdRef.current === convId) {
                 setMessages((prev) =>
-                  prev.map((m) => (m.id === tempUserMsg.id ? data.userMessage : m))
+                  prev.map((m) => (m.id === userMsg.id ? data.userMessage : m))
                 );
-              } else if (data.type === 'reasoning') {
-                setMessages((prev) =>
-                  prev.map((m) =>
+              }
+            } else if (data.type === 'reasoning') {
+              if (streamObj) streamObj.aiMsg.reasoning += data.chunk;
+              if (currentIdRef.current === convId) {
+                setMessages((prev) => {
+                  const exists = prev.some((m) => m.id === tempAiMsgId);
+                  if (!exists) return [...prev, streamObj?.aiMsg || aiMsg];
+                  return prev.map((m) =>
                     m.id === tempAiMsgId
                       ? { ...m, reasoning: (m.reasoning || '') + data.chunk }
                       : m
-                  )
-                );
-              } else if (data.type === 'chunk') {
-                setMessages((prev) =>
-                  prev.map((m) =>
+                  );
+                });
+              }
+            } else if (data.type === 'chunk') {
+              if (streamObj) streamObj.aiMsg.content += data.chunk;
+              if (currentIdRef.current === convId) {
+                setMessages((prev) => {
+                  const exists = prev.some((m) => m.id === tempAiMsgId);
+                  if (!exists) return [...prev, streamObj?.aiMsg || aiMsg];
+                  return prev.map((m) =>
                     m.id === tempAiMsgId
                       ? { ...m, content: (m.content || '') + data.chunk }
                       : m
-                  )
-                );
-              } else if (data.type === 'done') {
-                setMessages((prev) =>
-                  prev.map((m) => (m.id === tempAiMsgId ? data.assistantMessage : m))
-                );
-                fetchConversations();
-              } else if (data.type === 'error') {
+                  );
+                });
+              }
+            } else if (data.type === 'done') {
+              if (streamObj) streamObj.isDone = true;
+              activeStreamsRef.current.delete(convId);
+              setStreamTick((t) => t + 1);
+
+              if (currentIdRef.current === convId) {
+                setMessages((prev) => {
+                  const withoutTemp = prev.filter((m) => m.id !== tempAiMsgId);
+                  return [...withoutTemp, data.assistantMessage];
+                });
+              }
+              fetchConversations();
+            } else if (data.type === 'error') {
+              if (streamObj) streamObj.isDone = true;
+              activeStreamsRef.current.delete(convId);
+              setStreamTick((t) => t + 1);
+
+              if (currentIdRef.current === convId) {
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === tempAiMsgId
@@ -326,10 +386,6 @@ export default function App() {
                       : m
                   )
                 );
-              }
-            } else {
-              if (data.type === 'done') {
-                fetchConversations();
               }
             }
           } catch (e) {
@@ -339,11 +395,11 @@ export default function App() {
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        console.log('Stream stopped by user');
+        console.log('Stream stopped by user for conv', convId);
         if (currentIdRef.current === convId) {
           setMessages((prev) =>
             prev.map((m) =>
-              m.id === streamingMessageId
+              m.id.startsWith('ai-stream-')
                 ? { ...m, content: m.content + '\n\n*(사용자에 의해 생성이 중단되었습니다)*' }
                 : m
             )
@@ -363,15 +419,27 @@ export default function App() {
         }
       }
     } finally {
-      setIsLoading(false);
-      setStreamingMessageId(null);
-      abortControllerRef.current = null;
+      if (activeStreamsRef.current.has(convId)) {
+        activeStreamsRef.current.delete(convId);
+        setStreamTick((t) => t + 1);
+      }
     }
   };
 
   const handleSend = () => {
     executeSendMessage(input);
   };
+
+  // 현재 보고 있는 방이 답변을 생성 중인지 확인
+  const isCurrentRoomLoading = Boolean(
+    currentId &&
+    activeStreamsRef.current.has(currentId) &&
+    !activeStreamsRef.current.get(currentId)?.isDone
+  );
+
+  const streamingMessageId = isCurrentRoomLoading
+    ? activeStreamsRef.current.get(currentId)?.tempAiMsgId
+    : null;
 
   const modelsList = [
     {
@@ -404,8 +472,6 @@ export default function App() {
         onDeleteConversation={handleDeleteConversation}
         theme={theme}
         onToggleTheme={handleToggleTheme}
-        useGlobalMemory={useGlobalMemory}
-        onToggleMemory={handleToggleMemory}
       />
 
       <main className="main-content">
@@ -476,7 +542,7 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* 전역 메모리 ON/OFF 버튼 */}
+            {/* 전역 메모리 ON/OFF 버튼 (상단에서만 표시) */}
             <button
               className={`memory-pill-btn ${useGlobalMemory ? 'active' : ''}`}
               onClick={handleToggleMemory}
@@ -513,7 +579,7 @@ export default function App() {
         ) : (
           <ChatArea
             messages={messages}
-            isLoading={isLoading}
+            isLoading={isCurrentRoomLoading}
             streamingMessageId={streamingMessageId}
           />
         )}
@@ -524,7 +590,7 @@ export default function App() {
           setInput={setInput}
           onSend={handleSend}
           onStop={handleStopGeneration}
-          isLoading={isLoading}
+          isLoading={isCurrentRoomLoading}
           onEnhancePrompt={handleEnhancePrompt}
           isEnhancing={isEnhancingPrompt}
         />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, MessageSquare, Trash2, PanelLeftClose, User, Brain, Sun, Moon } from 'lucide-react';
+import { Plus, MessageSquare, Trash2, PanelLeftClose, User, Sun, Moon } from 'lucide-react';
 
 export default function Sidebar({
   isOpen,
@@ -11,8 +11,6 @@ export default function Sidebar({
   onDeleteConversation,
   theme,
   onToggleTheme,
-  useGlobalMemory,
-  onToggleMemory,
 }) {
   return (
     <aside className={`sidebar ${isOpen ? '' : 'closed'}`}>
@@ -66,25 +64,6 @@ export default function Sidebar({
 
       {/* 설정 및 기능 제어 푸터 */}
       <div className="sidebar-footer">
-        {/* 이전 대화 기억(전역 메모리) ON/OFF */}
-        <div
-          className="sidebar-setting-row"
-          onClick={onToggleMemory}
-          title="다른 대화방의 과거 기억을 참고할지 여부를 설정합니다"
-        >
-          <div className="setting-label">
-            <Brain size={16} color={useGlobalMemory ? '#10a37f' : 'var(--text-muted)'} />
-            <span>이전 대화 기억</span>
-          </div>
-          <label className="switch" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              checked={useGlobalMemory}
-              onChange={onToggleMemory}
-            />
-            <span className="slider"></span>
-          </label>
-        </div>
 
         {/* 라이트 / 다크 테마 전환 */}
         <div
