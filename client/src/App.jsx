@@ -242,13 +242,18 @@ export default function App() {
     let convId = currentId;
 
     try {
-      // 신규 대화인 경우 대화방 먼저 생성
+      // 신규 대화인 경우 대화방 먼저 생성 (첫 질문 전송 시 AI가 스마트 요약 제목으로 자동 갱신)
       if (!convId) {
-        const title = text.length > 25 ? text.slice(0, 25) + '...' : text;
+        const cleanPreview = text
+          .replace(/당신은.*?전문가(?:입니다|로서)[.,\s]*/gi, '')
+          .replace(/^(안녕|안녕하세요|질문이\s*있는데|혹시)\s*,?\s*/gi, '')
+          .trim();
+        const initialTitle = (cleanPreview.slice(0, 18) + (cleanPreview.length > 18 ? '...' : '')) || '새로운 대화';
+
         const convRes = await fetch('/api/conversations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title }),
+          body: JSON.stringify({ title: initialTitle }),
         });
         if (convRes.ok) {
           const newConv = await convRes.json();
@@ -328,7 +333,11 @@ export default function App() {
             const data = JSON.parse(jsonStr);
             const streamObj = activeStreamsRef.current.get(convId);
 
-            if (data.type === 'user_saved') {
+            if (data.type === 'title_updated' && data.title) {
+              setConversations((prev) =>
+                prev.map((c) => (c.id === convId ? { ...c, title: data.title } : c))
+              );
+            } else if (data.type === 'user_saved') {
               if (streamObj) streamObj.userMsg = data.userMessage;
               if (currentIdRef.current === convId) {
                 setMessages((prev) =>

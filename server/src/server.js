@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool, initDatabase } from './config/db.js';
-import { generateDeepSeekStream, optimizePrompt } from './services/deepseek.js';
+import { generateDeepSeekStream, optimizePrompt, generateConversationTitle } from './services/deepseek.js';
 
 dotenv.config();
 
@@ -173,6 +173,40 @@ app.delete('/api/conversations/:id', async (req, res) => {
   return res.json({ success: true, message: '대화방이 삭제되었습니다.' });
 });
 
+// 5-1. 대화방 제목 변경 (수정) 엔드포인트
+app.patch('/api/conversations/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title } = req.body;
+  if (!title || !title.trim()) {
+    return res.status(400).json({ error: '제목을 입력해주세요.' });
+  }
+
+  const cleanTitle = title.trim();
+
+  if (dbConnected) {
+    try {
+      const result = await pool.query(
+        'UPDATE conversations SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [cleanTitle, id]
+      );
+      if (result.rows.length > 0) {
+        return res.json(result.rows[0]);
+      }
+    } catch (err) {
+      console.error('Update title DB error:', err.message);
+    }
+  }
+
+  const conv = mockConversations.find((c) => c.id === id);
+  if (conv) {
+    conv.title = cleanTitle;
+    conv.updated_at = new Date().toISOString();
+    return res.json(conv);
+  }
+
+  return res.status(404).json({ error: '대화방을 찾을 수 없습니다.' });
+});
+
 // 6. [3주차 핵심] DeepSeek 실시간 SSE 스트리밍 메시지 전송 엔드포인트
 app.post('/api/conversations/:id/messages/stream', async (req, res) => {
   const { id } = req.params;
@@ -259,6 +293,27 @@ app.post('/api/conversations/:id/messages/stream', async (req, res) => {
 
   // 사용자 메시지 전송 완료 이벤트 통지
   res.write(`data: ${JSON.stringify({ type: 'user_saved', userMessage: userMsg })}\n\n`);
+
+  // 첫 번째 질문인 경우: AI가 질문 핵심을 분석하여 간결하고 스마트한 대화방 제목 자동 생성 & 갱신
+  if (historyMessages.length <= 1) {
+    generateConversationTitle(trimmedContent)
+      .then(async (smartTitle) => {
+        if (smartTitle) {
+          if (dbConnected) {
+            await pool.query('UPDATE conversations SET title = $1 WHERE id = $2', [smartTitle, id]);
+          } else {
+            const conv = mockConversations.find((c) => c.id === id);
+            if (conv) conv.title = smartTitle;
+          }
+          if (isClientConnected) {
+            try {
+              res.write(`data: ${JSON.stringify({ type: 'title_updated', title: smartTitle })}\n\n`);
+            } catch (e) {}
+          }
+        }
+      })
+      .catch((err) => console.error('AI title error:', err.message));
+  }
 
   // DeepSeek AI 스트리밍 생성
   let fullAiResponse = '';

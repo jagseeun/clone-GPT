@@ -155,3 +155,67 @@ export async function optimizePrompt(rawPrompt) {
     throw new Error('프롬프트 개선 중 오류가 발생했습니다: ' + error.message);
   }
 }
+
+/**
+ * 첫 질문을 분석하여 ChatGPT처럼 간결하고 스마트한 대화방 제목(2~4단어) 자동 생성
+ * @param {string} userMessage - 첫 질문 본문
+ * @returns {Promise<string>}
+ */
+export async function generateConversationTitle(userMessage) {
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  if (!userMessage) return '새로운 대화';
+
+  // API 키가 없거나 시뮬레이션 모드일 때의 깔끔한 제목 추출
+  const fallbackClean = (msg) => {
+    const cleaned = msg
+      .replace(/당신은.*?전문가(?:입니다|로서)[.,\s]*/gi, '')
+      .replace(/^(안녕|안녕하세요|질문이\s*있는데|혹시|저기|혹시요|궁금한게\s*있는데|알려줘|알려주세요)\s*,?\s*/gi, '')
+      .replace(/[\r\n]+/g, ' ')
+      .trim();
+    const short = cleaned.slice(0, 18);
+    return short ? `${short}${cleaned.length > 18 ? '...' : ''}` : '새로운 대화';
+  };
+
+  if (!apiKey) {
+    return fallbackClean(userMessage);
+  }
+
+  try {
+    const openai = new OpenAI({
+      baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+      apiKey: apiKey,
+      timeout: 10000,
+    });
+
+    const response = await openai.chat.completions.create({
+      model: 'deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a professional assistant that generates concise, elegant, and relevant conversation titles for a chat sidebar in Korean.\n' +
+            '- Respond with ONLY the title (2 to 4 words, maximum 18 characters).\n' +
+            '- No quotation marks, no punctuation, no emojis, no explanations, no prefixes.\n' +
+            '- Examples: "파이썬 피보나치 알고리즘", "React 상태 관리", "Docker 컨테이너 배포", "딥러닝 모델 최적화"',
+        },
+        {
+          role: 'user',
+          content: userMessage.slice(0, 400),
+        },
+      ],
+      max_tokens: 25,
+      temperature: 0.4,
+    });
+
+    const raw = response.choices[0]?.message?.content?.trim();
+    if (raw) {
+      const clean = raw.replace(/["'“”‘’.,!?]/g, '').trim();
+      return clean.slice(0, 20);
+    }
+  } catch (err) {
+    console.error('Failed to generate AI title:', err.message);
+  }
+
+  return fallbackClean(userMessage);
+}
+
