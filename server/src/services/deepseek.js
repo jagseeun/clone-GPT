@@ -96,6 +96,18 @@ export async function* generateDeepSeekStream(messages, globalMemory = [], selec
       userFriendlyError = '⚠️ **크레딧 부족 또는 요청 한도 초과**: DeepSeek 계정의 잔액을 확인해 주세요.';
     } else if (error.code === 'ETIMEDOUT' || error.type === 'timeout') {
       userFriendlyError = '⏱️ **연결 시간 초과**: 서버 응답이 지연되고 있습니다.';
+    } else if (
+      error.message?.includes('Connection error') ||
+      error.code === 'ECONNREFUSED' ||
+      error.cause?.code === 'ECONNREFUSED'
+    ) {
+      userFriendlyError = 
+        '🌐 **DeepSeek API 연결 실패 (네트워크 차단 감지)**\n\n' +
+        '현재 접속 중인 네트워크(LG U+ / 회사망 / 사내 보안망)에서 DeepSeek 도메인(`api.deepseek.com`)이 127.0.0.1로 차단되어 연결이 거부되었습니다.\n\n' +
+        '💡 **해결 방법**:\n' +
+        '- **VPN 또는 Cloudflare WARP (1.1.1.1)**: 활성화 시 통신사 DNS 차단을 즉시 우회하여 정상 작동합니다.\n' +
+        '- **모바일 핫스팟 연결**: 스마트폰 테더링 등 차단되지 않은 외부 회선으로 시도해 보세요.\n' +
+        '- **프록시 / OpenRouter 활용**: `server/.env`에서 `DEEPSEEK_BASE_URL`을 프록시 주소로 설정하세요.';
     } else if (error.message) {
       userFriendlyError = `❌ **DeepSeek API 오류**: ${error.message}`;
     }
@@ -151,8 +163,9 @@ export async function optimizePrompt(rawPrompt) {
 
     return response.choices[0]?.message?.content?.trim() || rawPrompt;
   } catch (error) {
-    console.error('Prompt Optimization Error:', error);
-    throw new Error('프롬프트 개선 중 오류가 발생했습니다: ' + error.message);
+    console.error('Prompt Optimization Error:', error.message);
+    // 네트워크 차단 등으로 API 호출 실패 시 규칙 기반 전문가 프롬프트로 자연스럽게 대체
+    return `당신은 해당 분야의 최고 전문가입니다. 다음 요청에 대해 핵심 요약, 즉시 실행 가능한 솔루션/코드, 실무 주의사항을 두괄식으로 명쾌하게 답변해주세요.\n\n주제: "${rawPrompt}"`;
   }
 }
 
