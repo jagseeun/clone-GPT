@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, User, Copy, Check, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
+import PaginatedMarkdown from './PaginatedMarkdown';
 
 // 텍스트 추출 헬퍼 함수
 function extractText(node) {
@@ -78,6 +79,34 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   const scrollRef = useRef(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
 
+  const markdownComponents = useMemo(
+    () => ({
+      pre({ children }) {
+        return <>{children}</>;
+      },
+      code({ node, className, children, ...props }) {
+        const match = /language-(\w+)/.exec(className || '');
+        const rawText = extractText(children).replace(/\n$/, '');
+        const isBlock = match || rawText.includes('\n');
+
+        if (!isBlock) {
+          return (
+            <code className="inline-code" {...props}>
+              {children}
+            </code>
+          );
+        }
+
+        return (
+          <CodeBlock language={match ? match[1] : ''} codeText={rawText}>
+            {children}
+          </CodeBlock>
+        );
+      },
+    }),
+    []
+  );
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -119,41 +148,13 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                       />
                     )}
 
-                    {/* 본문 마크다운 */}
+                    {/* 본문 마크다운 (헤딩 기반 페이지 분할 및 좌측 목차 지원) */}
                     {msg.content ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          // pre 태그 중첩 방지: 내부 code 태그가 CodeBlock으로 렌더링
-                          pre({ children }) {
-                            return <>{children}</>;
-                          },
-                          code({ node, className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            const rawText = extractText(children).replace(/\n$/, '');
-                            const isBlock = match || rawText.includes('\n');
-
-                            if (!isBlock) {
-                              return (
-                                <code className="inline-code" {...props}>
-                                  {children}
-                                </code>
-                              );
-                            }
-
-                            return (
-                              <CodeBlock
-                                language={match ? match[1] : ''}
-                                codeText={rawText}
-                              >
-                                {children}
-                              </CodeBlock>
-                            );
-                          },
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      <PaginatedMarkdown
+                        content={msg.content}
+                        isStreaming={isStreaming}
+                        components={markdownComponents}
+                      />
                     ) : (
                       isStreaming && !hasReasoning && (
                         <span className="blinking-cursor">▍</span>
