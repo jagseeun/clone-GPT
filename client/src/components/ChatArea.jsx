@@ -106,13 +106,46 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   // 메시지별 전체 보기 모드 관리 { [msgId]: boolean }
   const [fullViewModes, setFullViewModes] = useState({});
 
-  // 사용자의 스크롤 위치 감지 (바닥에서 100px 이상 벗어났는지 확인)
+  // 마우스 휠 감지: 위로 1픽셀이라도 굴리는 순간(deltaY < 0) 즉각 자동 스크롤을 멈춰서 화면 끌어내림을 원천 차단!
+  const handleWheelCapture = (e) => {
+    if (e.deltaY < 0) {
+      userScrolledUpRef.current = true;
+      setIsUserScrolledUp(true);
+    }
+  };
+
+  // 모바일/터치패드 터치 스크롤 감지
+  const touchStartYRef = useRef(0);
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      const deltaY = e.touches[0].clientY - touchStartYRef.current;
+      if (deltaY > 6) {
+        userScrolledUpRef.current = true;
+        setIsUserScrolledUp(true);
+      }
+    }
+  };
+
+  // 키보드(PageUp, ArrowUp, Home) 스크롤 감지
+  const handleKeyDownCapture = (e) => {
+    if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) {
+      userScrolledUpRef.current = true;
+      setIsUserScrolledUp(true);
+    }
+  };
+
+  // 사용자의 스크롤 위치 감지 (바닥에서 25px 이상 벗어났는지 확인)
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    if (distanceFromBottom > 100) {
+    if (distanceFromBottom > 25) {
       if (!userScrolledUpRef.current) {
         userScrolledUpRef.current = true;
         setIsUserScrolledUp(true);
@@ -251,7 +284,15 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   );
 
   return (
-    <div className="chat-messages" ref={scrollRef} onScroll={handleScroll}>
+    <div
+      className="chat-messages"
+      ref={scrollRef}
+      onScroll={handleScroll}
+      onWheelCapture={handleWheelCapture}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onKeyDownCapture={handleKeyDownCapture}
+    >
       <div className="chat-messages-container">
         {parsedMessages.map((msg, idx) => {
           const isUser = msg.role === 'user';
