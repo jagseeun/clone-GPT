@@ -94,12 +94,17 @@ export default function PaginatedMarkdown({ content, isStreaming, components }) 
   const [currentPage, setCurrentPage] = useState(0);
   const [viewMode, setViewMode] = useState('paginated'); // 'paginated' | 'full'
   const [isTocOpen, setIsTocOpen] = useState(true);
-  const contentAreaRef = useRef(null);
+  const cardRef = useRef(null);
+  const isFirstMount = useRef(true);
 
-  // 페이지 변경 시 본문 스크롤을 맨 위로 이동
+  // 페이지 변경 시 해당 카드 위치로 부드럽게 스크롤
   useEffect(() => {
-    if (contentAreaRef.current) {
-      contentAreaRef.current.scrollTop = 0;
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    if (cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [currentPage]);
 
@@ -116,7 +121,7 @@ export default function PaginatedMarkdown({ content, isStreaming, components }) 
   const currentSection = pages[safeCurrentPage];
 
   return (
-    <div className="paginated-card">
+    <div className="paginated-card" ref={cardRef}>
       {/* 1. 상단 컨트롤 바 */}
       <div className="paginated-topbar">
         <div className="paginated-left-meta">
@@ -194,7 +199,7 @@ export default function PaginatedMarkdown({ content, isStreaming, components }) 
           )}
 
           {/* 오른쪽 페이지 본문 마크다운 */}
-          <div className="paginated-content-wrapper" ref={contentAreaRef}>
+          <div className="paginated-content-wrapper">
             <div className="markdown-body">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
                 {currentSection.content}
@@ -204,7 +209,7 @@ export default function PaginatedMarkdown({ content, isStreaming, components }) 
         </div>
       ) : (
         /* 전체 보기 모드 */
-        <div className="paginated-full-wrapper" ref={contentAreaRef}>
+        <div className="paginated-full-wrapper">
           <div className="markdown-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
               {content}
