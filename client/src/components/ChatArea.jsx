@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, User, Copy, Check, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
-import ChatToc, { extractHeadings, slugify } from './ChatToc';
+import { Bot, User, Copy, Check, ChevronDown, ChevronRight, ChevronLeft, Sparkles, Layers, BookOpen } from 'lucide-react';
+import ChatToc, { splitMarkdownPages } from './ChatToc';
 
 // 텍스트 추출 헬퍼 함수
 function extractText(node) {
@@ -79,70 +79,65 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   const scrollRef = useRef(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isTocOpen, setIsTocOpen] = useState(true);
-  const [activeHeadingId, setActiveHeadingId] = useState(null);
-  const [activeHeadingIdx, setActiveHeadingIdx] = useState(0);
 
-  // 가장 최근 어시스턴트 메시지 중 2개 이상의 헤딩을 가진 메시지 탐색
-  const latestAssistantWithHeadings = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
+  // 메시지별 페이지 번호 관리 { [msgId]: pageIndex }
+  const [messagePages, setMessagePages] = useState({});
+  // 메시지별 전체 보기 모드 관리 { [msgId]: boolean }
+  const [fullViewModes, setFullViewModes] = useState({});
+
+  const setMsgCurrentPage = (msgId, pageIdx) => {
+    setMessagePages((prev) => ({ ...prev, [msgId]: pageIdx }));
+    // 페이지 선택 시 전체 보기가 켜져있다면 페이지 뷰로 전환
+    setFullViewModes((prev) => ({ ...prev, [msgId]: false }));
+  };
+
+  const toggleFullView = (msgId) => {
+    setFullViewModes((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  // 각 메시지의 마크다운 페이지 분할 캐싱
+  const parsedMessages = useMemo(() => {
+    return messages.map((msg, idx) => {
+      const msgId = String(msg.id || `msg-${idx}`);
       if (msg.role === 'assistant' && msg.content) {
-        const msgId = msg.id || `msg-${i}`;
-        const headings = extractHeadings(msg.content, msgId);
-        if (headings.length >= 2) {
-          return { msgId, headings };
-        }
+        const pages = splitMarkdownPages(msg.content);
+        return { ...msg, msgId, pages };
+      }
+      return { ...msg, msgId, pages: [] };
+    });
+  }, [messages]);
+
+  // 좌측 목차(TOC)와 연동할 타겟 어시스턴트 메시지 (가장 최근 2페이지 이상 메시지)
+  const targetAssistantMsg = useMemo(() => {
+    for (let i = parsedMessages.length - 1; i >= 0; i--) {
+      const msg = parsedMessages[i];
+      if (msg.role === 'assistant' && msg.pages && msg.pages.length >= 2) {
+        return msg;
       }
     }
     return null;
-  }, [messages]);
+  }, [parsedMessages]);
 
-  // 대화나 헤딩 메시지가 바뀔 때 첫 헤딩으로 초기화
-  const currentMsgIdRef = useRef(null);
+  const targetMsgId = targetAssistantMsg ? targetAssistantMsg.msgId : null;
+  const targetPages = targetAssistantMsg ? targetAssistantMsg.pages : [];
+  const targetCurrentPageIdx = targetMsgId ? (messagePages[targetMsgId] || 0) : 0;
+  const targetIsFullView = targetMsgId ? !!fullViewModes[targetMsgId] : false;
+
+  // 스트리밍 진행 중 새 페이지가 생길 때 자동 최신 페이지 추적
   useEffect(() => {
-    if (latestAssistantWithHeadings?.msgId !== currentMsgIdRef.current) {
-      currentMsgIdRef.current = latestAssistantWithHeadings?.msgId;
-      setActiveHeadingIdx(0);
-      if (latestAssistantWithHeadings?.headings?.[0]) {
-        setActiveHeadingId(latestAssistantWithHeadings.headings[0].id);
-      } else {
-        setActiveHeadingId(null);
+    if (streamingMessageId) {
+      const streamMsg = parsedMessages.find((m) => m.msgId === String(streamingMessageId));
+      if (streamMsg && streamMsg.pages.length > 0) {
+        const lastPageIdx = streamMsg.pages.length - 1;
+        setMessagePages((prev) => {
+          if (prev[streamMsg.msgId] !== lastPageIdx) {
+            return { ...prev, [streamMsg.msgId]: lastPageIdx };
+          }
+          return prev;
+        });
       }
     }
-  }, [latestAssistantWithHeadings?.msgId]);
-
-  // 스크롤 감지를 통한 활성 목차(TOC) 자동 하이라이트 동기화
-  useEffect(() => {
-    if (!latestAssistantWithHeadings || latestAssistantWithHeadings.headings.length === 0) return;
-
-    const headings = latestAssistantWithHeadings.headings;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const intersecting = entries.filter((e) => e.isIntersecting);
-        if (intersecting.length > 0) {
-          intersecting.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-          const topTarget = intersecting[0].target;
-          setActiveHeadingId(topTarget.id);
-          const idx = headings.findIndex((h) => h.id === topTarget.id);
-          if (idx !== -1) {
-            setActiveHeadingIdx(idx);
-          }
-        }
-      },
-      {
-        root: scrollRef.current,
-        rootMargin: '0px 0px -65% 0px',
-        threshold: 0.1,
-      }
-    );
-
-    headings.forEach((h) => {
-      const el = document.getElementById(h.id);
-      if (el) observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, [latestAssistantWithHeadings]);
+  }, [parsedMessages, streamingMessageId]);
 
   // 자동 스크롤 하단 이동 (스트리밍 및 메시지 추가 시)
   useEffect(() => {
@@ -157,73 +152,11 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
-  // 목차 클릭 시 해당 헤딩으로 부드러운 스크롤 & 펄스 하이라이트 효과
-  const handleSelectHeading = (id, idx) => {
-    setActiveHeadingId(id);
-    setActiveHeadingIdx(idx);
-    const targetEl = document.getElementById(id);
-    if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      targetEl.classList.remove('highlight-pulse');
-      void targetEl.offsetWidth; // force reflow
-      targetEl.classList.add('highlight-pulse');
-    }
-  };
-
-  // 목차 이전/다음 스텝 이동
-  const handleStepHeading = (direction) => {
-    if (!latestAssistantWithHeadings) return;
-    const headings = latestAssistantWithHeadings.headings;
-    const nextIdx = activeHeadingIdx + direction;
-    if (nextIdx >= 0 && nextIdx < headings.length) {
-      handleSelectHeading(headings[nextIdx].id, nextIdx);
-    }
-  };
-
-  // 마크다운 커스텀 렌더러 생성 (헤딩 ID 일치 및 코드 블록 복사 지원)
-  const getMarkdownComponents = (msgId) => {
-    const seenMap = {};
-    const getId = (text) => {
-      const base = slugify(text, msgId);
-      if (!seenMap[base]) {
-        seenMap[base] = 1;
-        return base;
-      }
-      const id = `${base}-${seenMap[base]}`;
-      seenMap[base]++;
-      return id;
-    };
-
-    return {
+  // 마크다운 커스텀 렌더러
+  const markdownComponents = useMemo(
+    () => ({
       pre({ children }) {
         return <>{children}</>;
-      },
-      h1({ children, ...props }) {
-        const text = extractText(children);
-        const id = getId(text);
-        return (
-          <h1 id={id} className="markdown-heading" {...props}>
-            {children}
-          </h1>
-        );
-      },
-      h2({ children, ...props }) {
-        const text = extractText(children);
-        const id = getId(text);
-        return (
-          <h2 id={id} className="markdown-heading" {...props}>
-            {children}
-          </h2>
-        );
-      },
-      h3({ children, ...props }) {
-        const text = extractText(children);
-        const id = getId(text);
-        return (
-          <h3 id={id} className="markdown-heading" {...props}>
-            {children}
-          </h3>
-        );
       },
       code({ node, className, children, ...props }) {
         const match = /language-(\w+)/.exec(className || '');
@@ -244,36 +177,59 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
           </CodeBlock>
         );
       },
-    };
-  };
+    }),
+    []
+  );
 
   return (
     <div className="chat-layout-wrapper">
-      {/* 1. 채팅 영역 좌측에 깔끔하게 도킹된 목차 (TOC) 사이드바 */}
-      {latestAssistantWithHeadings && (
+      {/* 1. 채팅창 좌측에 배치된 페이지 목차 (TOC) 사이드바 */}
+      {targetAssistantMsg && (
         <ChatToc
-          headings={latestAssistantWithHeadings.headings}
-          activeHeadingId={activeHeadingId}
-          activeHeadingIdx={activeHeadingIdx}
           isOpen={isTocOpen}
           onToggle={() => setIsTocOpen((prev) => !prev)}
-          onSelectHeading={handleSelectHeading}
-          onStep={handleStepHeading}
+          pages={targetPages}
+          currentPageIdx={targetCurrentPageIdx}
+          isFullView={targetIsFullView}
+          onToggleFullView={() => toggleFullView(targetMsgId)}
+          onSelectPage={(pageIdx) => {
+            setMsgCurrentPage(targetMsgId, pageIdx);
+            const el = document.getElementById(`msg-container-${targetMsgId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          }}
+          onStep={(direction) => {
+            const nextIdx = targetCurrentPageIdx + direction;
+            if (nextIdx >= 0 && nextIdx < targetPages.length) {
+              setMsgCurrentPage(targetMsgId, nextIdx);
+            }
+          }}
         />
       )}
 
-      {/* 2. 본문 채팅 메시지 스트림 (충분한 너비와 쾌적한 가독성 보장) */}
+      {/* 2. 본문 채팅 메시지 영역 */}
       <div className="chat-messages" ref={scrollRef}>
         <div className="chat-messages-container">
-          {messages.map((msg, idx) => {
+          {parsedMessages.map((msg, idx) => {
             const isUser = msg.role === 'user';
-            const isStreaming = msg.id === streamingMessageId;
+            const isStreaming = msg.msgId === String(streamingMessageId);
             const hasReasoning = !!msg.reasoning;
             const isThinking = isStreaming && hasReasoning && !msg.content;
-            const msgId = msg.id || `msg-${idx}`;
+            const msgId = msg.msgId;
+
+            const pages = msg.pages || [];
+            const hasMultiplePages = pages.length > 1;
+            const currentPageIdx = Math.min(messagePages[msgId] || 0, Math.max(0, pages.length - 1));
+            const isFullView = !!fullViewModes[msgId];
+            const currentPage = pages[currentPageIdx] || { title: '개요', content: msg.content };
 
             return (
-              <div key={msgId} className={`message-row ${isUser ? 'user' : 'assistant'}`}>
+              <div
+                key={msgId || idx}
+                id={`msg-container-${msgId}`}
+                className={`message-row ${isUser ? 'user' : 'assistant'}`}
+              >
                 {!isUser && (
                   <div className="avatar bot-avatar">
                     <Bot size={18} />
@@ -292,22 +248,108 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                         />
                       )}
 
-                      {/* 본문 마크다운 (순수 ReactMarkdown으로 안정적이고 깨짐 없는 렌더링) */}
-                      {msg.content ? (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={getMarkdownComponents(msgId)}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                      ) : (
-                        isStreaming && !hasReasoning && (
-                          <span className="blinking-cursor">▍</span>
-                        )
-                      )}
+                      {/* 페이지 분할 지원 카드 or 단일 메시지 */}
+                      {hasMultiplePages ? (
+                        <div className="paginated-card">
+                          {/* 상단 페이지 정보 및 모드 전환 바 */}
+                          <div className="paginated-topbar">
+                            <div className="paginated-left-meta">
+                              <span className="badge-page-num">
+                                {isFullView ? '전체 보기' : `P. ${currentPageIdx + 1} / ${pages.length}`}
+                              </span>
+                              <span className="page-breadcrumb-title">
+                                {isFullView ? '모든 페이지 연속 보기' : currentPage.title}
+                              </span>
+                            </div>
 
-                      {isStreaming && msg.content && (
-                        <span className="blinking-cursor">▍</span>
+                            <div className="paginated-mode-toggles">
+                              <button
+                                className={`mode-toggle-btn ${!isFullView ? 'active' : ''}`}
+                                onClick={() => isFullView && toggleFullView(msgId)}
+                                title="페이지별 모드"
+                              >
+                                <BookOpen size={12} />
+                                <span>페이지</span>
+                              </button>
+                              <button
+                                className={`mode-toggle-btn ${isFullView ? 'active' : ''}`}
+                                onClick={() => !isFullView && toggleFullView(msgId)}
+                                title="전체 연속 보기"
+                              >
+                                <Layers size={12} />
+                                <span>전체</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 페이지 본문 (깨짐 없는 마크다운 렌더링) */}
+                          <div className="paginated-content-wrapper">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={markdownComponents}
+                            >
+                              {isFullView ? msg.content : currentPage.content}
+                            </ReactMarkdown>
+
+                            {isStreaming && (
+                              <span className="blinking-cursor">▍</span>
+                            )}
+                          </div>
+
+                          {/* 하단 페이지 넘기기 컨트롤러 (페이지 모드일 때만 표시) */}
+                          {!isFullView && (
+                            <div className="paginated-bottom-bar">
+                              <button
+                                className="paginated-nav-btn"
+                                disabled={currentPageIdx <= 0}
+                                onClick={() => setMsgCurrentPage(msgId, currentPageIdx - 1)}
+                              >
+                                <ChevronLeft size={13} />
+                                <span>이전</span>
+                              </button>
+
+                              <div className="paginated-dots-nav">
+                                {pages.map((p, pIdx) => (
+                                  <button
+                                    key={p.id || pIdx}
+                                    className={`page-jump-dot ${pIdx === currentPageIdx ? 'active' : ''}`}
+                                    onClick={() => setMsgCurrentPage(msgId, pIdx)}
+                                    title={`${pIdx + 1}페이지: ${p.title}`}
+                                  />
+                                ))}
+                              </div>
+
+                              <button
+                                className="paginated-nav-btn"
+                                disabled={currentPageIdx >= pages.length - 1}
+                                onClick={() => setMsgCurrentPage(msgId, currentPageIdx + 1)}
+                              >
+                                <span>다음</span>
+                                <ChevronRight size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* 단일 페이지 기본 렌더링 */
+                        <>
+                          {msg.content ? (
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={markdownComponents}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          ) : (
+                            isStreaming && !hasReasoning && (
+                              <span className="blinking-cursor">▍</span>
+                            )
+                          )}
+
+                          {isStreaming && msg.content && (
+                            <span className="blinking-cursor">▍</span>
+                          )}
+                        </>
                       )}
 
                       {!isStreaming && msg.content && (

@@ -1464,4 +1464,189 @@ input:checked + .slider:before {
   }
 }
 
+.side-toc-viewmode-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.side-toc-viewmode-btn:hover {
+  background-color: rgba(16, 163, 127, 0.15);
+}
+
+/* ==========================================================================
+   Paginated Message Card & Controls (페이지 분할 및 쾌적한 가독성)
+   ========================================================================== */
+
+.paginated-card {
+  margin: 8px 0 12px 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background-color: var(--bg-card);
+  overflow: hidden;
+  box-shadow: 0 4px 16px var(--input-shadow);
+  transition: border-color 0.2s ease;
+  width: 100%;
+}
+
+.paginated-card:hover {
+  border-color: rgba(16, 163, 127, 0.4);
+}
+
+.paginated-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background-color: var(--bg-hover);
+  border-bottom: 1px solid var(--border-color);
+  gap: 10px;
+}
+
+.paginated-left-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.badge-page-num {
+  font-size: 11px;
+  font-weight: 700;
+  background-color: rgba(16, 163, 127, 0.15);
+  color: var(--accent-color);
+  padding: 3px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.page-breadcrumb-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paginated-mode-toggles {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-main);
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.mode-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-toggle-btn:hover {
+  color: var(--text-main);
+}
+
+.mode-toggle-btn.active {
+  background-color: var(--bg-card);
+  color: var(--accent-color);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.paginated-content-wrapper {
+  padding: 20px 24px;
+  min-width: 0;
+  background-color: var(--bg-card);
+  line-height: 1.7;
+}
+
+.paginated-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background-color: var(--bg-hover);
+  border-top: 1px solid var(--border-color);
+  gap: 12px;
+}
+
+.paginated-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.paginated-nav-btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.paginated-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.paginated-dots-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-jump-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(128, 128, 128, 0.3);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.page-jump-dot:hover {
+  background-color: var(--text-secondary);
+  transform: scale(1.2);
+}
+
+.page-jump-dot.active {
+  background-color: var(--accent-color);
+  width: 20px;
+  border-radius: 4px;
+}
+
+
 
