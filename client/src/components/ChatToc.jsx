@@ -94,7 +94,7 @@ export function MessageToc({ pages, currentPageIdx, onSelectPage, isFullView }) 
 
       <div className="sub-toc-list">
         {pages.map((p, idx) => {
-          const isActive = !isFullView && currentPageIdx === idx;
+          const isActive = currentPageIdx === idx;
           return (
             <button
               key={p.id || idx}

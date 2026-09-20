@@ -613,6 +613,8 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  position: relative;
+  scroll-behavior: smooth;
 }
 
 .chat-messages-container {
@@ -1519,6 +1521,45 @@ pre.code-block-pre code.hljs {
   }
 }
 
+/* 전체 연속 보기 모드 섹션 구분 및 스크롤 여백 */
+.full-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
 
+.full-view-section {
+  scroll-margin-top: 32px;
+}
 
+/* 최신 답변 보기 플로팅 버튼 */
+.scroll-to-bottom-float-btn {
+  position: sticky;
+  bottom: 16px;
+  align-self: center;
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 8px 16px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  z-index: 40;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s ease-in-out;
+}
 
+.scroll-to-bottom-float-btn:hover {
+  background-color: var(--card-hover);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 163, 127, 0.28);
+}

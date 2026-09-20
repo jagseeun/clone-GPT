@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
-import { Bot, User, Copy, Check, ChevronDown, ChevronRight, ChevronLeft, Sparkles, Layers, BookOpen } from 'lucide-react';
+import { Bot, User, Copy, Check, ChevronDown, ChevronRight, ChevronLeft, Sparkles, Layers, BookOpen, ArrowDown } from 'lucide-react';
 import { splitMarkdownPages, MessageToc } from './ChatToc';
 
 // 텍스트 추출 헬퍼 함수
@@ -96,15 +96,81 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   const scrollRef = useRef(null);
   const [copiedMessageId, setCopiedMessageId] = useState(null);
 
+  // 스마트 스크롤 제어: 사용자가 위로 휠을 올렸을 때 자동 스크롤 강제 이동을 방지
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const userScrolledUpRef = useRef(false);
+  const prevMessagesCountRef = useRef(messages.length);
+
   // 메시지별 현재 페이지 번호 관리 { [msgId]: pageIndex }
   const [messagePages, setMessagePages] = useState({});
   // 메시지별 전체 보기 모드 관리 { [msgId]: boolean }
   const [fullViewModes, setFullViewModes] = useState({});
 
+  // 사용자의 스크롤 위치 감지 (바닥에서 100px 이상 벗어났는지 확인)
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+    if (distanceFromBottom > 100) {
+      if (!userScrolledUpRef.current) {
+        userScrolledUpRef.current = true;
+        setIsUserScrolledUp(true);
+      }
+    } else {
+      if (userScrolledUpRef.current) {
+        userScrolledUpRef.current = false;
+        setIsUserScrolledUp(false);
+      }
+    }
+  };
+
+  // 최신 답변 위치로 부드럽게 이동하고 자동 스크롤 재개
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+      userScrolledUpRef.current = false;
+      setIsUserScrolledUp(false);
+    }
+  };
+
+  // 새로운 사용자 질문/메시지가 추가되면 스크롤 잠금을 해제하고 맨 아래로 이동
+  useEffect(() => {
+    if (messages.length > prevMessagesCountRef.current) {
+      userScrolledUpRef.current = false;
+      setIsUserScrolledUp(false);
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }
+    prevMessagesCountRef.current = messages.length;
+  }, [messages.length]);
+
+  // 페이지 모드에서 특정 페이지로 이동 (하단 이전/다음 버튼 등)
   const setMsgCurrentPage = (msgId, pageIdx) => {
     setMessagePages((prev) => ({ ...prev, [msgId]: pageIdx }));
-    // 특정 페이지 클릭 시 전체 보기가 켜져있다면 페이지 모드로 전환
     setFullViewModes((prev) => ({ ...prev, [msgId]: false }));
+  };
+
+  // 목차 클릭 처리: 전체 모드일 때는 화면 전환 없이 해당 섹션 위치로 부드럽게 스크롤,
+  // 페이지 모드일 때는 해당 페이지만 표시
+  const handleSelectTocPage = (msgId, pageIdx) => {
+    const isFull = !!fullViewModes[msgId];
+    setMessagePages((prev) => ({ ...prev, [msgId]: pageIdx }));
+
+    if (isFull) {
+      // 전체 보기 모드: 전체 보기를 유지하고 해당 섹션 DOM으로 부드럽게 스크롤
+      const targetElem = document.getElementById(`msg-${msgId}-section-${pageIdx}`);
+      if (targetElem) {
+        targetElem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } else {
+      // 페이지 모드: 해당 페이지만 표시
+      setFullViewModes((prev) => ({ ...prev, [msgId]: false }));
+    }
   };
 
   const toggleFullView = (msgId) => {
@@ -139,10 +205,12 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
     }
   }, [parsedMessages, streamingMessageId]);
 
-  // 자동 스크롤 하단 이동 (스트리밍 및 메시지 추가 시)
+  // 답변 스트리밍 중 자동 스크롤: 사용자가 위로 휠을 올린 경우 화면 끌어내림을 방지!
   useEffect(() => {
     if (scrollRef.current && (isLoading || streamingMessageId)) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      if (!userScrolledUpRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     }
   }, [messages, isLoading, streamingMessageId]);
 
@@ -183,7 +251,7 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   );
 
   return (
-    <div className="chat-messages" ref={scrollRef}>
+    <div className="chat-messages" ref={scrollRef} onScroll={handleScroll}>
       <div className="chat-messages-container">
         {parsedMessages.map((msg, idx) => {
           const isUser = msg.role === 'user';
@@ -229,7 +297,7 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                     pages={pages}
                     currentPageIdx={currentPageIdx}
                     isFullView={isFullView}
-                    onSelectPage={(pIdx) => setMsgCurrentPage(msgId, pIdx)}
+                    onSelectPage={(pIdx) => handleSelectTocPage(msgId, pIdx)}
                   />
                 )}
               </div>
@@ -279,12 +347,31 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
 
                     {/* 페이지 본문 (깨짐 없는 마크다운 렌더링 + syntax highlighting) */}
                     <div className="paginated-content-wrapper markdown-body">
-                      <ReactMarkdown
-                        remarkPlugins={remarkPlugins}
-                        components={markdownComponents}
-                      >
-                        {isFullView ? msg.content : currentPage.content}
-                      </ReactMarkdown>
+                      {isFullView ? (
+                        <div className="full-view-container">
+                          {pages.map((p, pIdx) => (
+                            <div
+                              key={p.id || pIdx}
+                              id={`msg-${msgId}-section-${pIdx}`}
+                              className="full-view-section"
+                            >
+                              <ReactMarkdown
+                                remarkPlugins={remarkPlugins}
+                                components={markdownComponents}
+                              >
+                                {p.content}
+                              </ReactMarkdown>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <ReactMarkdown
+                          remarkPlugins={remarkPlugins}
+                          components={markdownComponents}
+                        >
+                          {currentPage.content}
+                        </ReactMarkdown>
+                      )}
 
                       {isStreaming && (
                         <span className="blinking-cursor">▍</span>
@@ -379,6 +466,18 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
           </div>
         )}
       </div>
+
+      {/* 최신 답변 보기 플로팅 버튼 (사용자가 위쪽으로 스크롤했을 때 표시) */}
+      {isUserScrolledUp && (
+        <button
+          className="scroll-to-bottom-float-btn"
+          onClick={scrollToBottom}
+          title="최신 답변으로 이동"
+        >
+          <ArrowDown size={14} />
+          <span>최신 답변 보기</span>
+        </button>
+      )}
     </div>
   );
 }
