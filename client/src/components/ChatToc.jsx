@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, FileText } from 'lucide-react';
+import { Bookmark } from 'lucide-react';
 
 /**
  * 마크다운 본문을 코드 블록 손상 없이 안전하게 헤딩(# 또는 ##) 단위의 페이지로 분할
@@ -80,35 +80,35 @@ export function splitMarkdownPages(content) {
 }
 
 /**
- * 개별 답변 메시지 바로 옆에 배치되는 답변 전용 인라인 목차 컴포넌트
+ * 챗봇 아이콘 바로 밑에 배치되는 배경 없는 텍스트 목차 컴포넌트
  */
 export function MessageToc({ pages, currentPageIdx, onSelectPage, isFullView }) {
   if (!pages || pages.length < 2) return null;
 
   return (
-    <aside className="inline-msg-toc">
-      <div className="inline-toc-header">
-        <Bookmark size={13} color="#10a37f" />
-        <span>목차 ({pages.length})</span>
+    <nav className="avatar-sub-toc">
+      <div className="sub-toc-header">
+        <Bookmark size={11} color="#10a37f" />
+        <span>목차</span>
       </div>
 
-      <nav className="inline-toc-list">
+      <div className="sub-toc-list">
         {pages.map((p, idx) => {
           const isActive = !isFullView && currentPageIdx === idx;
           return (
             <button
               key={p.id || idx}
-              className={`inline-toc-item ${isActive ? 'active' : ''}`}
+              className={`sub-toc-item ${isActive ? 'active' : ''}`}
               onClick={() => onSelectPage(idx)}
               title={`${idx + 1}. ${p.title}`}
             >
-              <span className="inline-toc-num">{String(idx + 1).padStart(2, '0')}</span>
-              <span className="inline-toc-text">{p.title}</span>
+              <span className="sub-toc-num">{idx + 1}.</span>
+              <span className="sub-toc-title">{p.title}</span>
             </button>
           );
         })}
-      </nav>
-    </aside>
+      </div>
+    </nav>
   );
 }
 

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/atom-one-dark.css';
 import { Bot, User, Copy, Check, ChevronDown, ChevronRight, ChevronLeft, Sparkles, Layers, BookOpen } from 'lucide-react';
 import { splitMarkdownPages, MessageToc } from './ChatToc';
 
@@ -12,9 +14,21 @@ function extractText(node) {
   return String(node || '');
 }
 
-// 개별 코드 블록 컴포넌트 (언어 표시 + 원클릭 복사 버튼)
-function CodeBlock({ language, codeText, children }) {
+// 개별 코드 블록 컴포넌트 (문법 색상 하이라이팅 + 언어 표시 + 원클릭 복사 버튼)
+function CodeBlock({ language, codeText }) {
   const [copied, setCopied] = useState(false);
+
+  // highlight.js를 통한 문법 색상 하이라이팅 적용 (파이썬, JS, C++, 쉘 등)
+  const highlightedHtml = useMemo(() => {
+    try {
+      if (language && hljs.getLanguage(language)) {
+        return hljs.highlight(codeText, { language, ignoreIllegals: true }).value;
+      }
+      return hljs.highlightAuto(codeText).value;
+    } catch {
+      return codeText;
+    }
+  }, [language, codeText]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(codeText);
@@ -41,7 +55,10 @@ function CodeBlock({ language, codeText, children }) {
         </button>
       </div>
       <pre className="code-block-pre">
-        <code>{children}</code>
+        <code
+          className={`hljs ${language ? `language-${language}` : ''}`}
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
       </pre>
     </div>
   );
@@ -155,9 +172,7 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
         }
 
         return (
-          <CodeBlock language={match ? match[1] : ''} codeText={rawText}>
-            {children}
-          </CodeBlock>
+          <CodeBlock language={match ? match[1] : ''} codeText={rawText} />
         );
       },
     }),
@@ -194,142 +209,30 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
             );
           }
 
-          // 2. 어시스턴트 메시지 (페이지가 2개 이상인 경우: 답변 바로 옆에 목차 배치)
-          if (hasMultiplePages) {
-            return (
-              <div key={msgId || idx} className="message-row assistant has-inline-toc">
+          // 2. 어시스턴트 메시지 (좌측 아바타 컬럼 바로 밑에 목차 배치)
+          return (
+            <div
+              key={msgId || idx}
+              className={`message-row assistant ${hasMultiplePages ? 'has-toc-col' : ''}`}
+            >
+              {/* 좌측 컬럼: 챗봇 아바타 + 그 바로 아래에 배경 없는 텍스트 목차 */}
+              <div className="assistant-avatar-col">
                 <div className="avatar bot-avatar">
                   <Bot size={18} />
                 </div>
 
-                <div className="assistant-message-wrapper">
-                  {/* 답변 바로 왼쪽에 배치되는 해당 답변 전용 인라인 목차 */}
+                {hasMultiplePages && (
                   <MessageToc
                     pages={pages}
                     currentPageIdx={currentPageIdx}
                     isFullView={isFullView}
                     onSelectPage={(pIdx) => setMsgCurrentPage(msgId, pIdx)}
                   />
-
-                  {/* 답변 본문 박스 */}
-                  <div className="message-bubble assistant paginated-bubble">
-                    {/* DeepSeek-R1 생각 과정 박스 */}
-                    {(hasReasoning || isThinking) && (
-                      <ReasoningBox
-                        reasoning={msg.reasoning}
-                        isThinking={isThinking}
-                      />
-                    )}
-
-                    <div className="paginated-card">
-                      {/* 상단 페이지 정보 & 모드 전환 바 */}
-                      <div className="paginated-topbar">
-                        <div className="paginated-left-meta">
-                          <span className="badge-page-num">
-                            {isFullView ? '전체 보기' : `P. ${currentPageIdx + 1} / ${pages.length}`}
-                          </span>
-                          <span className="page-breadcrumb-title">
-                            {isFullView ? '모든 페이지 연속 보기' : currentPage.title}
-                          </span>
-                        </div>
-
-                        <div className="paginated-mode-toggles">
-                          <button
-                            className={`mode-toggle-btn ${!isFullView ? 'active' : ''}`}
-                            onClick={() => isFullView && toggleFullView(msgId)}
-                            title="페이지별 모드"
-                          >
-                            <BookOpen size={12} />
-                            <span>페이지</span>
-                          </button>
-                          <button
-                            className={`mode-toggle-btn ${isFullView ? 'active' : ''}`}
-                            onClick={() => !isFullView && toggleFullView(msgId)}
-                            title="전체 연속 모드"
-                          >
-                            <Layers size={12} />
-                            <span>전체</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 페이지 본문 (깨짐 없는 마크다운 렌더링) */}
-                      <div className="paginated-content-wrapper markdown-body">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={markdownComponents}
-                        >
-                          {isFullView ? msg.content : currentPage.content}
-                        </ReactMarkdown>
-
-                        {isStreaming && (
-                          <span className="blinking-cursor">▍</span>
-                        )}
-                      </div>
-
-                      {/* 하단 페이지 넘기기 컨트롤러 (페이지 모드일 때만 표시) */}
-                      {!isFullView && (
-                        <div className="paginated-bottom-bar">
-                          <button
-                            className="paginated-nav-btn"
-                            disabled={currentPageIdx <= 0}
-                            onClick={() => setMsgCurrentPage(msgId, currentPageIdx - 1)}
-                          >
-                            <ChevronLeft size={13} />
-                            <span>이전</span>
-                          </button>
-
-                          <div className="paginated-dots-nav">
-                            {pages.map((p, pIdx) => (
-                              <button
-                                key={p.id || pIdx}
-                                className={`page-jump-dot ${pIdx === currentPageIdx ? 'active' : ''}`}
-                                onClick={() => setMsgCurrentPage(msgId, pIdx)}
-                                title={`${pIdx + 1}페이지: ${p.title}`}
-                              />
-                            ))}
-                          </div>
-
-                          <button
-                            className="paginated-nav-btn"
-                            disabled={currentPageIdx >= pages.length - 1}
-                            onClick={() => setMsgCurrentPage(msgId, currentPageIdx + 1)}
-                          >
-                            <span>다음</span>
-                            <ChevronRight size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {!isStreaming && msg.content && (
-                      <div className="message-actions">
-                        <button
-                          className="icon-btn action-btn"
-                          onClick={() => handleCopyMessage(msgId, msg.content)}
-                          title="답변 전체 복사"
-                        >
-                          {copiedMessageId === msgId ? (
-                            <Check size={14} color="#10a37f" />
-                          ) : (
-                            <Copy size={14} />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
-            );
-          }
 
-          // 3. 어시스턴트 메시지 (단일 페이지 또는 짧은 답변)
-          return (
-            <div key={msgId || idx} className="message-row assistant">
-              <div className="avatar bot-avatar">
-                <Bot size={18} />
-              </div>
-              <div className="message-bubble assistant">
+              {/* 우측 컬럼: 답변 본문 박스 */}
+              <div className="message-bubble assistant paginated-bubble">
                 {/* DeepSeek-R1 생각 과정 박스 */}
                 {(hasReasoning || isThinking) && (
                   <ReasoningBox
@@ -338,24 +241,103 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                   />
                 )}
 
-                <div className="message-content markdown-body">
-                  {msg.content ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={markdownComponents}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  ) : (
-                    isStreaming && !hasReasoning && (
-                      <span className="blinking-cursor">▍</span>
-                    )
-                  )}
+                {hasMultiplePages ? (
+                  <div className="paginated-card">
+                    {/* 상단 페이지 정보 & 모드 전환 바 */}
+                    <div className="paginated-topbar">
+                      <div className="paginated-left-meta">
+                        <span className="badge-page-num">
+                          {isFullView ? '전체 보기' : `P. ${currentPageIdx + 1} / ${pages.length}`}
+                        </span>
+                        <span className="page-breadcrumb-title">
+                          {isFullView ? '모든 페이지 연속 보기' : currentPage.title}
+                        </span>
+                      </div>
 
-                  {isStreaming && msg.content && (
-                    <span className="blinking-cursor">▍</span>
-                  )}
-                </div>
+                      <div className="paginated-mode-toggles">
+                        <button
+                          className={`mode-toggle-btn ${!isFullView ? 'active' : ''}`}
+                          onClick={() => isFullView && toggleFullView(msgId)}
+                          title="페이지별 모드"
+                        >
+                          <BookOpen size={12} />
+                          <span>페이지</span>
+                        </button>
+                        <button
+                          className={`mode-toggle-btn ${isFullView ? 'active' : ''}`}
+                          onClick={() => !isFullView && toggleFullView(msgId)}
+                          title="전체 연속 모드"
+                        >
+                          <Layers size={12} />
+                          <span>전체</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 페이지 본문 (깨짐 없는 마크다운 렌더링 + syntax highlighting) */}
+                    <div className="paginated-content-wrapper markdown-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={markdownComponents}
+                      >
+                        {isFullView ? msg.content : currentPage.content}
+                      </ReactMarkdown>
+
+                      {isStreaming && (
+                        <span className="blinking-cursor">▍</span>
+                      )}
+                    </div>
+
+                    {/* 하단 페이지 넘기기 컨트롤러 (깔끔한 페이지 텍스트 표시) */}
+                    {!isFullView && (
+                      <div className="paginated-bottom-bar">
+                        <button
+                          className="paginated-nav-btn"
+                          disabled={currentPageIdx <= 0}
+                          onClick={() => setMsgCurrentPage(msgId, currentPageIdx - 1)}
+                        >
+                          <ChevronLeft size={13} />
+                          <span>이전</span>
+                        </button>
+
+                        <div className="paginated-page-indicator">
+                          <span className="current-page-num">{currentPageIdx + 1}</span>
+                          <span className="page-slash">/</span>
+                          <span className="total-page-num">{pages.length} 페이지</span>
+                        </div>
+
+                        <button
+                          className="paginated-nav-btn"
+                          disabled={currentPageIdx >= pages.length - 1}
+                          onClick={() => setMsgCurrentPage(msgId, currentPageIdx + 1)}
+                        >
+                          <span>다음</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* 단일 페이지 기본 렌더링 */
+                  <div className="message-content markdown-body">
+                    {msg.content ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={markdownComponents}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      isStreaming && !hasReasoning && (
+                        <span className="blinking-cursor">▍</span>
+                      )
+                    )}
+
+                    {isStreaming && msg.content && (
+                      <span className="blinking-cursor">▍</span>
+                    )}
+                  </div>
+                )}
 
                 {!isStreaming && msg.content && (
                   <div className="message-actions">
@@ -379,8 +361,10 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
 
         {isLoading && !streamingMessageId && (
           <div className="message-row assistant">
-            <div className="avatar bot-avatar">
-              <Bot size={18} />
+            <div className="assistant-avatar-col">
+              <div className="avatar bot-avatar">
+                <Bot size={18} />
+              </div>
             </div>
             <div className="message-bubble assistant">
               <div className="typing-dots">
