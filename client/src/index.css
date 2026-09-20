@@ -1218,10 +1218,17 @@ input:checked + .slider:before {
   align-items: flex-start;
   gap: 8px;
   flex-shrink: 0;
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
+}
+
+.message-row.assistant.has-toc-col {
+  gap: 36px;
 }
 
 .message-row.assistant.has-toc-col .assistant-avatar-col {
-  width: 130px;
+  width: 155px;
 }
 
 /* 챗봇 아이콘 바로 밑의 텍스트 목차 (배경색 없음) */
