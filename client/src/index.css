@@ -604,16 +604,7 @@ input:checked + .slider:before {
   line-height: 1.4;
 }
 
-/* Chat Layout & Messages Area */
-.chat-layout-wrapper {
-  flex: 1;
-  display: flex;
-  height: 100%;
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
+/* Chat Messages Area */
 .chat-messages {
   flex: 1;
   min-width: 0;
@@ -1218,130 +1209,76 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
-   Chat Side TOC (Table of Contents) & Heading Smooth Navigation
+   Inline Message TOC & Assistant Message Wrapper
+   (답변 바로 옆에 깔끔하게 배치되는 답변 전용 목차)
    ========================================================================== */
 
-.chat-side-toc {
-  width: 220px;
+.message-row.assistant.has-inline-toc {
+  width: 100%;
+}
+
+.assistant-message-wrapper {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+/* 개별 답변 전용 인라인 목차 (답변 왼쪽 옆) */
+.inline-msg-toc {
+  width: 175px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
-  background-color: var(--bg-sidebar);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  z-index: 10;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.chat-side-toc.closed {
-  display: none;
-}
-
-.side-toc-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 16px;
   background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px 8px;
+  box-shadow: 0 2px 10px var(--input-shadow);
+  transition: border-color 0.2s ease;
 }
 
-.side-toc-title {
+.inline-msg-toc:hover {
+  border-color: rgba(16, 163, 127, 0.35);
+}
+
+.inline-toc-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: var(--text-main);
-  letter-spacing: -0.2px;
-}
-
-.side-toc-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.side-toc-stepper {
-  display: flex;
-  align-items: center;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.toc-step-btn {
-  background: transparent;
-  border: none;
-  padding: 4px 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.toc-step-btn:hover:not(:disabled) {
-  background-color: var(--bg-hover);
-  color: var(--text-main);
-}
-
-.toc-step-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.side-toc-close-btn {
-  background: transparent;
-  border: none;
-  padding: 4px;
   color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 6px 8px 6px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 6px;
 }
 
-.side-toc-close-btn:hover {
-  color: var(--text-main);
-  background-color: var(--bg-hover);
-}
-
-.side-toc-subhead {
-  padding: 5px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  background-color: var(--bg-sidebar);
-  border-bottom: 1px solid rgba(128, 128, 128, 0.1);
-}
-
-.side-toc-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 6px;
+.inline-toc-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
 }
 
-.side-toc-nav::-webkit-scrollbar {
-  width: 4px;
+.inline-toc-list::-webkit-scrollbar {
+  width: 3px;
 }
 
-.side-toc-nav::-webkit-scrollbar-thumb {
+.inline-toc-list::-webkit-scrollbar-thumb {
   background-color: rgba(128, 128, 128, 0.25);
   border-radius: 2px;
 }
 
-.side-toc-item {
+.inline-toc-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 7px;
   background: transparent;
   border: none;
   border-radius: 6px;
@@ -1350,137 +1287,89 @@ input:checked + .slider:before {
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.35;
   transition: all 0.15s ease;
-  border-left: 2.5px solid transparent;
+  border-left: 2px solid transparent;
   width: 100%;
 }
 
-.side-toc-item:hover {
+.inline-toc-item:hover {
   background-color: var(--bg-hover);
   color: var(--text-main);
 }
 
-.side-toc-item.active {
+.inline-toc-item.active {
   background-color: rgba(16, 163, 127, 0.12);
   color: var(--accent-color);
   font-weight: 600;
   border-left-color: var(--accent-color);
 }
 
-.side-toc-item.level-1 {
-  font-weight: 600;
-}
-
-.side-toc-item.level-2 {
-  padding-left: 14px;
-  font-size: 11.5px;
-}
-
-.side-toc-item.level-3 {
-  padding-left: 20px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.side-toc-num {
+.inline-toc-num {
   font-family: monospace;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
-  opacity: 0.75;
+  opacity: 0.7;
+  margin-top: 1.5px;
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
-.side-toc-text {
+.inline-toc-text {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: normal;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
 }
 
-/* 목차 닫혔을 때 노출되는 미니 토글 알약 버튼 */
-.side-toc-open-pill {
-  position: absolute;
-  top: 12px;
-  left: 14px;
-  z-index: 25;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  box-shadow: 0 4px 12px var(--input-shadow);
-  transition: all 0.2s ease;
+.message-bubble.assistant.paginated-bubble {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
-.side-toc-open-pill:hover {
-  background-color: var(--bg-hover);
-  color: var(--accent-color);
-  border-color: rgba(16, 163, 127, 0.5);
-  transform: translateY(-1px);
-}
-
-/* 마크다운 헤딩 스크롤 앵커 및 펄스 하이라이트 효과 */
-.markdown-heading {
-  scroll-margin-top: 28px;
-  position: relative;
-  transition: background-color 0.4s ease;
-}
-
-@keyframes headingPulse {
-  0% {
-    background-color: rgba(16, 163, 127, 0.35);
-    border-radius: 6px;
+/* 모바일 화면 대응: 답변 위에 가로 스크롤 칩 바 형태로 배치 */
+@media (max-width: 768px) {
+  .assistant-message-wrapper {
+    flex-direction: column;
+    gap: 10px;
   }
-  100% {
-    background-color: transparent;
+
+  .inline-msg-toc {
+    width: 100%;
+    position: static;
+    padding: 8px 10px;
   }
-}
 
-.markdown-heading.highlight-pulse {
-  animation: headingPulse 1.6s ease-out;
-}
-
-/* 모바일/반응형 (목차는 오버레이 서랍으로 작동하여 가로 공간 보존) */
-@media (max-width: 860px) {
-  .chat-side-toc {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 40;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.35);
+  .inline-toc-header {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding: 0 0 6px 0;
   }
-}
 
-.side-toc-viewmode-btn {
-  background: transparent;
-  border: none;
-  color: var(--accent-color);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: background-color 0.15s ease;
-}
+  .inline-toc-list {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 6px;
+    max-height: none;
+  }
 
-.side-toc-viewmode-btn:hover {
-  background-color: rgba(16, 163, 127, 0.15);
+  .inline-toc-item {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .inline-toc-item.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--accent-color);
+  }
 }
 
 /* ==========================================================================

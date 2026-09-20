@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, ChevronUp, ChevronDown, PanelLeftClose, PanelLeftOpen, Layers } from 'lucide-react';
+import { Bookmark, FileText } from 'lucide-react';
 
 /**
  * 마크다운 본문을 코드 블록 손상 없이 안전하게 헤딩(# 또는 ##) 단위의 페이지로 분할
@@ -79,105 +79,37 @@ export function splitMarkdownPages(content) {
   return pages;
 }
 
-export default function ChatToc({
-  isOpen,
-  onToggle,
-  pages = [],
-  currentPageIdx = 0,
-  isFullView = false,
-  onToggleFullView,
-  onSelectPage,
-  onStep,
-}) {
+/**
+ * 개별 답변 메시지 바로 옆에 배치되는 답변 전용 인라인 목차 컴포넌트
+ */
+export function MessageToc({ pages, currentPageIdx, onSelectPage, isFullView }) {
   if (!pages || pages.length < 2) return null;
 
   return (
-    <>
-      {/* 1. 좌측 도킹 목차 사이드바 (채팅창 바로 왼쪽) */}
-      <aside className={`chat-side-toc ${isOpen ? 'open' : 'closed'}`}>
-        <div className="side-toc-header">
-          <div className="side-toc-title">
-            <Bookmark size={14} color="#10a37f" />
-            <span>페이지 목차</span>
-          </div>
-          <div className="side-toc-actions">
-            {/* 이전/다음 페이지 스텝 버튼 */}
-            <div className="side-toc-stepper">
-              <button
-                className="toc-step-btn"
-                onClick={() => onStep(-1)}
-                disabled={currentPageIdx <= 0 || isFullView}
-                title="이전 페이지로 이동"
-              >
-                <ChevronUp size={13} />
-              </button>
-              <button
-                className="toc-step-btn"
-                onClick={() => onStep(1)}
-                disabled={currentPageIdx >= pages.length - 1 || isFullView}
-                title="다음 페이지로 이동"
-              >
-                <ChevronDown size={13} />
-              </button>
-            </div>
+    <aside className="inline-msg-toc">
+      <div className="inline-toc-header">
+        <Bookmark size={13} color="#10a37f" />
+        <span>목차 ({pages.length})</span>
+      </div>
+
+      <nav className="inline-toc-list">
+        {pages.map((p, idx) => {
+          const isActive = !isFullView && currentPageIdx === idx;
+          return (
             <button
-              className="side-toc-close-btn"
-              onClick={onToggle}
-              title="목차 닫기"
+              key={p.id || idx}
+              className={`inline-toc-item ${isActive ? 'active' : ''}`}
+              onClick={() => onSelectPage(idx)}
+              title={`${idx + 1}. ${p.title}`}
             >
-              <PanelLeftClose size={14} />
+              <span className="inline-toc-num">{String(idx + 1).padStart(2, '0')}</span>
+              <span className="inline-toc-text">{p.title}</span>
             </button>
-          </div>
-        </div>
-
-        <div className="side-toc-subhead">
-          <span>
-            {isFullView
-              ? `전체 ${pages.length}개 페이지 펼침`
-              : `${currentPageIdx + 1} / ${pages.length} 페이지`}
-          </span>
-          {onToggleFullView && (
-            <button
-              className="side-toc-viewmode-btn"
-              onClick={onToggleFullView}
-              title={isFullView ? '페이지별 모드로 전환' : '전체 연속 모드로 전환'}
-            >
-              <Layers size={11} />
-              <span>{isFullView ? '페이지 보기' : '전체 보기'}</span>
-            </button>
-          )}
-        </div>
-
-        {/* 목차 페이지 리스트 */}
-        <nav className="side-toc-nav">
-          {pages.map((p, idx) => {
-            const isActive = !isFullView && currentPageIdx === idx;
-            return (
-              <button
-                key={p.id || idx}
-                className={`side-toc-item ${isActive ? 'active' : ''}`}
-                onClick={() => onSelectPage(idx)}
-                title={`${idx + 1}페이지: ${p.title}`}
-              >
-                <span className="side-toc-num">{String(idx + 1).padStart(2, '0')}</span>
-                <span className="side-toc-text">{p.title}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </aside>
-
-      {/* 2. 목차가 닫혀있을 때 화면 좌측에 노출되는 미니 토글 알약 버튼 */}
-      {!isOpen && (
-        <button
-          className="side-toc-open-pill"
-          onClick={onToggle}
-          title="목차 열기"
-        >
-          <PanelLeftOpen size={14} />
-          <span>목차 ({pages.length}P)</span>
-        </button>
-      )}
-    </>
+          );
+        })}
+      </nav>
+    </aside>
   );
 }
+
+export default MessageToc;
