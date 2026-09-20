@@ -152,6 +152,9 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
+  // remark-gfm 설정 (singleTilde: false 설정으로 '900~1,000kcal', '2~3시간' 등 숫자 범위 물결표가 취소선으로 오인식되는 문제 방지)
+  const remarkPlugins = useMemo(() => [[remarkGfm, { singleTilde: false }]], []);
+
   // 마크다운 커스텀 렌더러
   const markdownComponents = useMemo(
     () => ({
@@ -277,7 +280,7 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                     {/* 페이지 본문 (깨짐 없는 마크다운 렌더링 + syntax highlighting) */}
                     <div className="paginated-content-wrapper markdown-body">
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={remarkPlugins}
                         components={markdownComponents}
                       >
                         {isFullView ? msg.content : currentPage.content}
@@ -322,7 +325,7 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
                   <div className="message-content markdown-body">
                     {msg.content ? (
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={remarkPlugins}
                         components={markdownComponents}
                       >
                         {msg.content}
