@@ -103,8 +103,12 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
 
   // 메시지별 현재 페이지 번호 관리 { [msgId]: pageIndex }
   const [messagePages, setMessagePages] = useState({});
-  // 메시지별 전체 보기 모드 관리 { [msgId]: boolean }
-  const [fullViewModes, setFullViewModes] = useState({});
+  // 사용자의 기본 선호 뷰 모드 ('page' 또는 'full', localStorage에 저장하여 다음 모든 답변에도 자동 적용)
+  const [globalViewMode, setGlobalViewMode] = useState(() => {
+    return localStorage.getItem('clonegpt_view_mode') || 'page';
+  });
+  // 메시지별 개별 오버라이드 { [msgId]: boolean }
+  const [fullViewOverrides, setFullViewOverrides] = useState({});
 
   // 마우스 휠 감지: 위로 1픽셀이라도 굴리는 순간(deltaY < 0) 즉각 자동 스크롤을 멈춰서 화면 끌어내림을 원천 차단!
   const handleWheelCapture = (e) => {
@@ -185,13 +189,16 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
   // 페이지 모드에서 특정 페이지로 이동 (하단 이전/다음 버튼 등)
   const setMsgCurrentPage = (msgId, pageIdx) => {
     setMessagePages((prev) => ({ ...prev, [msgId]: pageIdx }));
-    setFullViewModes((prev) => ({ ...prev, [msgId]: false }));
+    setFullViewOverrides((prev) => ({ ...prev, [msgId]: false }));
   };
 
   // 목차 클릭 처리: 전체 모드일 때는 화면 전환 없이 해당 섹션 위치로 부드럽게 스크롤,
   // 페이지 모드일 때는 해당 페이지만 표시
   const handleSelectTocPage = (msgId, pageIdx) => {
-    const isFull = !!fullViewModes[msgId];
+    const isFull = fullViewOverrides[msgId] !== undefined
+      ? fullViewOverrides[msgId]
+      : (globalViewMode === 'full');
+
     setMessagePages((prev) => ({ ...prev, [msgId]: pageIdx }));
 
     if (isFull) {
@@ -202,12 +209,25 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
       }
     } else {
       // 페이지 모드: 해당 페이지만 표시
-      setFullViewModes((prev) => ({ ...prev, [msgId]: false }));
+      setFullViewOverrides((prev) => ({ ...prev, [msgId]: false }));
     }
   };
 
+  // 전체/페이지 모드 토글: 사용자가 모드를 변경하면 다음 모든 답변에도 자동 적용되도록 전역 모드와 동기화
   const toggleFullView = (msgId) => {
-    setFullViewModes((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+    const currentIsFull = fullViewOverrides[msgId] !== undefined
+      ? fullViewOverrides[msgId]
+      : (globalViewMode === 'full');
+    const nextIsFull = !currentIsFull;
+    const nextMode = nextIsFull ? 'full' : 'page';
+
+    setGlobalViewMode(nextMode);
+    localStorage.setItem('clonegpt_view_mode', nextMode);
+
+    setFullViewOverrides((prev) => ({
+      ...prev,
+      [msgId]: nextIsFull,
+    }));
   };
 
   // 각 메시지의 마크다운 페이지 분할 캐싱
@@ -304,7 +324,9 @@ export default function ChatArea({ messages, isLoading, streamingMessageId }) {
           const pages = msg.pages || [];
           const hasMultiplePages = pages.length > 1;
           const currentPageIdx = Math.min(messagePages[msgId] || 0, Math.max(0, pages.length - 1));
-          const isFullView = !!fullViewModes[msgId];
+          const isFullView = fullViewOverrides[msgId] !== undefined
+            ? fullViewOverrides[msgId]
+            : (globalViewMode === 'full');
           const currentPage = pages[currentPageIdx] || { title: '개요', content: msg.content };
 
           // 1. 사용자 메시지
