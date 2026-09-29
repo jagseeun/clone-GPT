@@ -915,9 +915,16 @@ input:checked + .slider:before {
   border-radius: 24px;
   padding: 10px 14px;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 4px 20px var(--input-shadow);
+}
+
+.input-row {
+  display: flex;
   align-items: flex-end;
   gap: 8px;
-  box-shadow: 0 4px 20px var(--input-shadow);
+  width: 100%;
 }
 
 .input-container:focus-within {
@@ -1562,4 +1569,329 @@ pre.code-block-pre code.hljs {
   color: var(--accent-color);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(16, 163, 127, 0.28);
+}
+
+/* =========================================================
+   [4주차 고도화] 사이드바 검색, 이름 수정, 안전 삭제, 파일 첨부, 내보내기, 토스트
+   ========================================================= */
+
+/* 1. 사이드바 대화 실시간 검색 */
+.sidebar-search-container {
+  padding: 0 14px 10px 14px;
+}
+
+.sidebar-search-box {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  gap: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.sidebar-search-box:focus-within {
+  border-color: var(--accent-color);
+}
+
+.sidebar-search-box .search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sidebar-search-box .search-input {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 13px;
+  width: 100%;
+  outline: none;
+}
+
+.sidebar-search-box .search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.search-clear-btn:hover {
+  color: var(--text-main);
+}
+
+/* 2. 대화 목록 액션 (이름 수정 & 삭제) */
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.history-item:hover .history-actions {
+  opacity: 1;
+}
+
+.history-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.history-action-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-main);
+}
+
+.history-action-btn.delete-btn:hover {
+  color: var(--danger-color);
+}
+
+.history-action-btn.confirm {
+  color: var(--accent-color);
+}
+
+.history-action-btn.cancel {
+  color: var(--danger-color);
+}
+
+/* 2-1. 대화 제목 인라인 수정창 */
+.history-item-edit-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.history-rename-input {
+  flex: 1;
+  background-color: var(--bg-main);
+  border: 1px solid var(--accent-color);
+  color: var(--text-main);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+/* 2-2. 대화 삭제 안전 확인창 */
+.history-item-delete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+}
+
+.delete-confirm-text {
+  font-size: 12px;
+  color: var(--danger-color);
+  font-weight: 500;
+}
+
+.delete-confirm-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.delete-confirm-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-main);
+}
+
+.delete-confirm-btn.danger {
+  background-color: var(--danger-color);
+  color: #ffffff;
+  border: none;
+}
+
+.delete-confirm-btn.danger:hover {
+  background-color: #dc2626;
+}
+
+/* 3. 파일 첨부 (Paperclip) 및 첨부 칩 배지 */
+.attach-file-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  height: 36px;
+}
+
+.attach-file-btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.attach-file-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.attached-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--text-main);
+  align-self: flex-start;
+  animation: fadeIn 0.15s ease-in-out;
+}
+
+.attached-file-badge .file-icon {
+  color: var(--accent-color);
+  flex-shrink: 0;
+}
+
+.attached-file-name {
+  font-weight: 500;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attached-file-size {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.attached-file-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 3px;
+  margin-left: 2px;
+}
+
+.attached-file-remove-btn:hover {
+  color: var(--danger-color);
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+/* 4. 대화 내보내기 (Export) 드롭다운 */
+.export-menu-wrapper {
+  position: relative;
+}
+
+.export-btn {
+  color: var(--text-secondary);
+}
+
+.export-btn:hover {
+  color: var(--accent-color);
+}
+
+.export-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.28);
+  padding: 6px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  animation: fadeIn 0.15s ease-in-out;
+}
+
+.export-dropdown-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 10px 4px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.export-option-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 450;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.export-option-item:hover {
+  background-color: var(--bg-hover);
+}
+
+/* 5. 플로팅 토스트 알림 메시지 */
+.toast-notification {
+  position: fixed;
+  bottom: 85px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #10a37f;
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  z-index: 9999;
+  animation: toastFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+@keyframes toastFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 15px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }

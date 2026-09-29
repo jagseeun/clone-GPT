@@ -4,7 +4,7 @@ import WelcomeScreen from './components/WelcomeScreen.jsx';
 import ChatArea from './components/ChatArea.jsx';
 import ChatInput from './components/ChatInput.jsx';
 import PromptModal from './components/PromptModal.jsx';
-import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain, Check, Sparkles, Zap } from 'lucide-react';
+import { PanelLeft, ChevronDown, SquarePen, KeyRound, X, Sun, Moon, Brain, Check, Sparkles, Zap, Download, FileText, Copy } from 'lucide-react';
 
 export default function App() {
   const [conversations, setConversations] = useState([]);
@@ -24,6 +24,18 @@ export default function App() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [originalPromptForModal, setOriginalPromptForModal] = useState('');
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
+
+  // 4주차: 대화 내보내기 & 토스트 알림 상태
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef(null);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage('');
+    }, 2800);
+  };
 
   // 테마 상태 (Dark / Light)
   const [theme, setTheme] = useState(() => {
@@ -70,11 +82,14 @@ export default function App() {
     localStorage.setItem('clonegpt_model', selectedModel);
   }, [selectedModel]);
 
-  // 바깥 클릭 시 모델 드롭다운 닫기
+  // 바깥 클릭 시 모델 드롭다운 및 내보내기 드롭다운 닫기
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (modelMenuRef.current && !modelMenuRef.current.contains(e.target)) {
         setIsModelMenuOpen(false);
+      }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setIsExportMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -168,10 +183,111 @@ export default function App() {
         if (currentId === id) {
           handleNewChat();
         }
+        showToast('대화가 삭제되었습니다.');
       }
     } catch (err) {
       console.error('Failed to delete conversation:', err);
     }
+  };
+
+  // 5-1. [4주차] 대화방 제목 변경 (Rename)
+  const handleRenameConversation = async (id, newTitle) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    try {
+      const res = await fetch(`/api/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (res.ok) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, title: trimmed } : c))
+        );
+        showToast('대화 제목이 변경되었습니다.');
+      }
+    } catch (err) {
+      console.error('Failed to rename conversation:', err);
+    }
+  };
+
+  // 5-2. [4주차] 대화 내보내기 (Export as Markdown, TXT, or Copy)
+  const handleExportConversation = (format) => {
+    if (!messages || messages.length === 0) return;
+
+    const currentConv = conversations.find((c) => c.id === currentId);
+    const title = currentConv?.title || 'CloneGPT 대화';
+    const cleanDate = new Date().toLocaleString();
+
+    if (format === 'copy') {
+      const textToCopy = messages
+        .map((m) => {
+          const role = m.role === 'user' ? '🧑 사용자' : `🤖 CloneGPT (${selectedModel})`;
+          return `[${role}]\n${m.content}\n`;
+        })
+        .join('\n---\n\n');
+
+      navigator.clipboard
+        .writeText(textToCopy)
+        .then(() => {
+          showToast('📋 대화 내용이 클립보드에 복사되었습니다.');
+        })
+        .catch(() => {
+          showToast('클립보드 복사에 실패했습니다.');
+        });
+      setIsExportMenuOpen(false);
+      return;
+    }
+
+    let fileContent = '';
+    let mimeType = 'text/plain;charset=utf-8';
+    let filename = `${title.replace(/[/\\?%*:|"<>]/g, '_')}_${Date.now()}`;
+
+    if (format === 'md') {
+      fileContent = `# 💬 CloneGPT 대화 기록: ${title}\n\n`;
+      fileContent += `- **대화 일시**: ${cleanDate}\n`;
+      fileContent += `- **사용 모델**: ${selectedModel}\n\n`;
+      fileContent += `---\n\n`;
+      messages.forEach((m) => {
+        if (m.role === 'user') {
+          fileContent += `## 🧑 사용자\n\n${m.content}\n\n`;
+        } else {
+          fileContent += `## 🤖 CloneGPT (${selectedModel})\n\n`;
+          if (m.reasoning) {
+            fileContent += `> 💭 **사고 과정(Reasoning)**:\n> ${m.reasoning.split('\n').join('\n> ')}\n\n`;
+          }
+          fileContent += `${m.content}\n\n`;
+        }
+        fileContent += `---\n\n`;
+      });
+      filename += '.md';
+      mimeType = 'text/markdown;charset=utf-8';
+    } else if (format === 'txt') {
+      fileContent = `========================================\n`;
+      fileContent += `CloneGPT 대화 기록: ${title}\n`;
+      fileContent += `일시: ${cleanDate}\n`;
+      fileContent += `모델: ${selectedModel}\n`;
+      fileContent += `========================================\n\n`;
+      messages.forEach((m) => {
+        const role = m.role === 'user' ? '[사용자]' : `[CloneGPT - ${selectedModel}]`;
+        fileContent += `${role}\n${m.content}\n\n`;
+        fileContent += `----------------------------------------\n\n`;
+      });
+      filename += '.txt';
+    }
+
+    const blob = new Blob([fileContent], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`📥 ${format === 'md' ? 'Markdown' : '텍스트'} 파일이 다운로드되었습니다.`);
+    setIsExportMenuOpen(false);
   };
 
   // 6. 현재 보고 있는 방의 생성 중지(Abort)
@@ -435,8 +551,15 @@ export default function App() {
     }
   };
 
-  const handleSend = () => {
-    executeSendMessage(input);
+  // [4주차] 파일 첨부 지원 메시지 전송
+  const handleSend = (attachedFile) => {
+    let fullText = input.trim();
+    if (attachedFile) {
+      const codeFence = attachedFile.extension || '';
+      const fileHeader = `[첨부 파일: ${attachedFile.name}]\n\`\`\`${codeFence}\n${attachedFile.content}\n\`\`\``;
+      fullText = fullText ? `${fileHeader}\n\n${fullText}` : `${fileHeader}\n\n첨부된 파일의 내용을 분석하고 설명해주세요.`;
+    }
+    executeSendMessage(fullText);
   };
 
   // 현재 보고 있는 방이 답변을 생성 중인지 확인
@@ -479,6 +602,7 @@ export default function App() {
         onSelectConversation={handleSelectConversation}
         onNewChat={handleNewChat}
         onDeleteConversation={handleDeleteConversation}
+        onRenameConversation={handleRenameConversation}
         theme={theme}
         onToggleTheme={handleToggleTheme}
       />
@@ -551,6 +675,46 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* 4주차: 대화 내보내기 (Export) 드롭다운 (메시지가 있을 때만 노출) */}
+            {messages.length > 0 && (
+              <div className="export-menu-wrapper" ref={exportMenuRef}>
+                <button
+                  className="icon-btn export-btn"
+                  onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                  title="대화 내보내기 및 복사"
+                >
+                  <Download size={18} />
+                </button>
+
+                {isExportMenuOpen && (
+                  <div className="export-dropdown-menu">
+                    <div className="export-dropdown-header">대화 내보내기</div>
+                    <button
+                      className="export-option-item"
+                      onClick={() => handleExportConversation('md')}
+                    >
+                      <FileText size={15} color="#10a37f" />
+                      <span>Markdown (.md) 저장</span>
+                    </button>
+                    <button
+                      className="export-option-item"
+                      onClick={() => handleExportConversation('txt')}
+                    >
+                      <FileText size={15} color="#60a5fa" />
+                      <span>텍스트 (.txt) 저장</span>
+                    </button>
+                    <button
+                      className="export-option-item"
+                      onClick={() => handleExportConversation('copy')}
+                    >
+                      <Copy size={15} color="#eab308" />
+                      <span>대화 전체 클립보드 복사</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 전역 메모리 ON/OFF 버튼 (상단에서만 표시) */}
             <button
               className={`memory-pill-btn ${useGlobalMemory ? 'active' : ''}`}
@@ -616,6 +780,13 @@ export default function App() {
         onRegenerate={handleEnhancePrompt}
         isRegenerating={isEnhancingPrompt}
       />
+
+      {/* 4주차: 토스트 알림 메시지 */}
+      {toastMessage && (
+        <div className="toast-notification">
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }
