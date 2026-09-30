@@ -34,6 +34,23 @@ export default function ChatInput({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 이미지 및 바이너리 파일 감지 (DeepSeek는 텍스트/코드 전용 모델)
+    const isBinary =
+      file.type.startsWith('image/') ||
+      file.type.startsWith('video/') ||
+      file.type.startsWith('audio/') ||
+      /\.(webp|png|jpe?g|gif|bmp|svg|ico|heic|pdf|zip|rar|tar|gz|7z|exe|dll|bin|mp4|mp3|avi|mov)$/i.test(
+        file.name
+      );
+
+    if (isBinary) {
+      alert(
+        '⚠️ 현재 CloneGPT에 연동된 DeepSeek AI(deepseek-chat / deepseek-reasoner)는 텍스트 및 소스코드 전용 모델입니다.\n\n이미지/바이너리 파일은 시각적으로 인식할 수 없으므로, 텍스트 문서(.txt, .md, .csv) 또는 프로그래밍 코드(.py, .js, .json, .html 등)를 첨부해 주세요!'
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     // 최대 1MB 크기 제한 (텍스트/코드 분석용)
     if (file.size > 1024 * 1024) {
       alert('파일 크기는 최대 1MB까지 첨부할 수 있습니다.');
