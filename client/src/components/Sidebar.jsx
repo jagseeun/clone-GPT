@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   MessageSquare,
@@ -72,6 +72,18 @@ export default function Sidebar({
     setDeletingId(null);
   };
 
+  // Escape 키 누르면 수정 또는 삭제 모드 취소
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setEditingId(null);
+        setDeletingId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <aside className={`sidebar ${isOpen ? '' : 'closed'}`}>
       <div className="sidebar-header">
@@ -128,9 +140,13 @@ export default function Sidebar({
             return (
               <div
                 key={conv.id}
-                className={`history-item ${conv.id === currentId ? 'active' : ''}`}
+                className={`history-item ${conv.id === currentId ? 'active' : ''} ${isDeleting ? 'is-deleting' : ''}`}
                 onClick={() => {
-                  if (!isEditing && !isDeleting) {
+                  if (isDeleting) {
+                    setDeletingId(null);
+                    return;
+                  }
+                  if (!isEditing) {
                     onSelectConversation(conv.id);
                   }
                 }}
@@ -165,21 +181,28 @@ export default function Sidebar({
                     </button>
                   </div>
                 ) : isDeleting ? (
-                  /* 2. 삭제 확인 모드 */
-                  <div className="history-item-delete-confirm" onClick={(e) => e.stopPropagation()}>
-                    <span className="delete-confirm-text">삭제할까요?</span>
-                    <button
-                      className="delete-confirm-btn danger"
-                      onClick={(e) => handleConfirmDelete(conv.id, e)}
-                    >
-                      확인
-                    </button>
-                    <button
-                      className="delete-confirm-btn"
-                      onClick={handleCancelDelete}
-                    >
-                      취소
-                    </button>
+                  /* 2. [4주차 개선] ChatGPT 스타일 깔끔한 삭제 확인 모드 */
+                  <div className="history-item-content delete-mode" onClick={(e) => e.stopPropagation()}>
+                    <Trash2 size={16} className="delete-mode-icon" />
+                    <span className="history-item-title deleting" title={conv.title}>
+                      {conv.title}
+                    </span>
+                    <div className="history-actions active-actions">
+                      <button
+                        className="history-action-btn confirm-delete-btn"
+                        onClick={(e) => handleConfirmDelete(conv.id, e)}
+                        title="삭제 확인"
+                      >
+                        <Check size={15} />
+                      </button>
+                      <button
+                        className="history-action-btn cancel-delete-btn"
+                        onClick={handleCancelDelete}
+                        title="취소"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   /* 3. 일반 목록 모드 */

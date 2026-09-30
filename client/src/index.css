@@ -1690,45 +1690,49 @@ pre.code-block-pre code.hljs {
   outline: none;
 }
 
-/* 2-2. 대화 삭제 안전 확인창 */
-.history-item-delete-confirm {
+/* 2-2. 대화 삭제 확인 (ChatGPT 스타일 일체형) */
+.history-item.is-deleting {
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.history-item-content.delete-mode {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  gap: 6px;
 }
 
-.delete-confirm-text {
-  font-size: 12px;
+.delete-mode-icon {
   color: var(--danger-color);
-  font-weight: 500;
+  flex-shrink: 0;
 }
 
-.delete-confirm-btn {
-  background: var(--bg-hover);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+.history-item-title.deleting {
+  color: var(--danger-color);
+  opacity: 0.9;
 }
 
-.delete-confirm-btn:hover {
-  background-color: var(--border-color);
-  color: var(--text-main);
+.history-actions.active-actions {
+  opacity: 1 !important;
 }
 
-.delete-confirm-btn.danger {
-  background-color: var(--danger-color);
-  color: #ffffff;
-  border: none;
+.confirm-delete-btn {
+  color: var(--danger-color) !important;
 }
 
-.delete-confirm-btn.danger:hover {
-  background-color: #dc2626;
+.confirm-delete-btn:hover {
+  background-color: rgba(239, 68, 68, 0.18) !important;
+  color: #ef4444 !important;
+}
+
+.cancel-delete-btn {
+  color: var(--text-muted) !important;
+}
+
+.cancel-delete-btn:hover {
+  background-color: var(--border-color) !important;
+  color: var(--text-main) !important;
 }
 
 /* 3. 파일 첨부 (Paperclip) 및 첨부 칩 배지 */
