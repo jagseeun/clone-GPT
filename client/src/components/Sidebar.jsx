@@ -129,8 +129,13 @@ export default function Sidebar({
         </div>
 
         {filteredConversations.length === 0 ? (
-          <div style={{ padding: '16px 12px', fontSize: '13px', color: 'var(--text-muted)' }}>
-            {searchQuery ? '일치하는 대화가 없습니다.' : '대화 내역이 없습니다.'}
+          <div className="history-empty-box">
+            <MessageSquare size={20} className="history-empty-icon" />
+            <div className="history-empty-text">
+              {searchQuery
+                ? '일치하는 대화가 없습니다.'
+                : '대화 내역이 없습니다.\n새 대화를 시작해보세요!'}
+            </div>
           </div>
         ) : (
           filteredConversations.map((conv) => {
@@ -260,9 +265,11 @@ export default function Sidebar({
           <div className="avatar user-avatar">
             <User size={16} />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: '13px' }}>사용자</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>CloneGPT Pro</div>
+            <div style={{ fontSize: '11px', color: 'var(--accent-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              DeepSeek Connected
+            </div>
           </div>
         </div>
       </div>

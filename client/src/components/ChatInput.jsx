@@ -138,10 +138,10 @@ export default function ChatInput({
             rows={1}
             placeholder={
               isLoading
-                ? '답변을 생성하는 중입니다...'
+                ? '답변을 생각하고 작성하는 중입니다...'
                 : attachedFile
-                ? `${attachedFile.name}에 대해 질문하거나 지시사항을 입력하세요...`
-                : '메시지를 입력하세요... (Enter로 전송, Shift + Enter로 줄바꿈)'
+                ? `[첨부: ${attachedFile.name}] 파일에 대해 질문할 내용을 입력하세요...`
+                : '무엇이든 물어보세요... (Enter로 전송, Shift + Enter로 줄바꿈)'
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -183,7 +183,7 @@ export default function ChatInput({
       </div>
 
       <div className="input-disclaimer">
-        CloneGPT는 실수를 할 수 있습니다. 중요한 정보는 항상 확인하세요.
+        CloneGPT는 실수를 할 수 있습니다. 중요한 정보는 항상 검증 후 활용하세요.
       </div>
     </div>
   );

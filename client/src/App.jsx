@@ -579,14 +579,14 @@ export default function App() {
       name: 'DeepSeek-V3',
       tag: 'Chat',
       icon: <Zap size={15} color="#10a37f" />,
-      desc: '빠르고 자연스러운 대화, 일상 질문, 코딩에 최적화된 최신 671B 모델',
+      desc: '빠르고 스마트한 일상 대화, 웹 개발, 실시간 코딩 최적화 (671B MoE)',
     },
     {
       id: 'deepseek-reasoner',
       name: 'DeepSeek-R1',
       tag: 'Reasoner',
       icon: <Sparkles size={15} color="#8b5cf6" />,
-      desc: 'OpenAI o1급 심층 사고 모델. 생각 과정(Reasoning)을 거쳐 최고 난도 문제 해결',
+      desc: 'OpenAI o1급 심층 추론 모델. 단계별 사고(Reasoning) 과정을 거쳐 복잡한 문제 해결',
     },
   ];
 
